@@ -70,6 +70,7 @@ def process_post(post_url):
 
     try:
         post_html = post_html.encode('UTF-8', errors='ignore')
+        post_html = post_html.replace('TEXT/HTML; CHARSET=WINDOWS-1255', 'TEXT/HTML; CHARSET=UTF-8')
     except Exception as ex:
         logging.error('Could not encode post_html to UTF-8')
 
@@ -101,9 +102,9 @@ def process_post(post_url):
         try:
             comments_html = comments_html.decode("cp1255", errors='ignore')
             comments_html = comments_html.encode('UTF-8', errors='ignore')
+            comments_html = comments_html.replace('text/html;charset=windows-1255', 'text/html;charset=utf-8')
         except Exception:
             pass
-        # logging.debug(comments_html)
 
         comments_filename = os.path.join(
             BACKUP_FOLDER,
