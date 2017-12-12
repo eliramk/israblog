@@ -115,11 +115,11 @@ def save_parsed_data(parsed_data):
 
 
 def main():
-    logging.basicConfig(level=logging.DEBUG)
     backup_files_list = get_backup_files()
     parsed_data = parse_backup_files(backup_files_list)
     save_parsed_data(parsed_data)
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG)
     main()
