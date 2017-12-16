@@ -11,9 +11,9 @@ import re
 import os
 from time import sleep
 
-BLOG_NUMBER = 'ENTER POST NUMBER HERE'  # A string containing the blog number. e.g. '11990'
-START_FROM_POST_NUMBER = None  # Optional. Use None or a string containing the post number to move back from. e.g. '3754624'
-STOP_AT_POST_NUMBER = None  # Optional
+BLOG_NUMBER = '11990'  # A string containing the blog number. e.g. '11990'
+START_FROM_POST_NUMBER = '3820213'  # Optional. Use None or a string containing the post number to move back from. e.g. '3754624'
+STOP_AT_POST_NUMBER = '3708275'  # Optional
 
 BLOG_URL = 'http://israblog.nana10.co.il/blogread.asp?blog=%s' % BLOG_NUMBER
 BASE_URL = 'http://israblog.nana10.co.il/blogread.asp'
