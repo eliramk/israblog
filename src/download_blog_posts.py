@@ -434,9 +434,12 @@ if __name__ == '__main__':
 
     logging.info('Israblog Batch Backup Script.')
     logging.info('This script backs up posts, template and comments. WITHOUT IMAGES!')
-    backup_folder = input('Backup folder [ %s ]: ' % BACKUP_FOLDER)
+    backup_folder = raw_input('Backup folder [ %s ]: ' % BACKUP_FOLDER)
 
     if backup_folder:
+        if not os.path.exists(backup_folder):
+            logging.error('Folder does not exist: %s' % backup_folder)
+            exit(1)
         BACKUP_FOLDER = backup_folder
 
     blog_number_start = input("Blog Number to Start: ")  # Blog number. e.g. 11990
