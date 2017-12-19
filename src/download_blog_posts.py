@@ -12,8 +12,8 @@ import os
 from time import sleep
 import datetime
 
-BLOG_NUMBER_START = 187  # Blog number. e.g. 11990
-BLOG_NUMBER_END = 1000
+# BLOG_NUMBER_START = 187  # Blog number. e.g. 11990
+# BLOG_NUMBER_END = 1000
 START_FROM_POST_NUMBER = None  # '3820213'  # Optional. Use None or a string containing the post number to move back from. e.g. '3754624'
 STOP_AT_POST_NUMBER = None  # '3708275'  # Optional
 SAVE_MONTHLY_PAGES = False
@@ -27,8 +27,6 @@ COMMENTS_URL = 'http://israblog.nana10.co.il/comments.asp?blog=%s&user=%s'
 BACKUP_FOLDER = '/users/eliram/Documents/israblog2'
 if not os.path.exists(BACKUP_FOLDER):
     BACKUP_FOLDER = os.path.dirname(os.path.realpath(__file__))
-LOG_FILE = os.path.join(BACKUP_FOLDER, 'log/backup_%s-%s_%s.log' % (
-    BLOG_NUMBER_START, BLOG_NUMBER_END, datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')))
 
 # RegEx
 RE_POST_URL_PATTERN = '\?blog=%s&a?m?p?;?blogcode=\d+'
@@ -433,14 +431,31 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     if not os.path.exists(os.path.join(BACKUP_FOLDER, 'log')):
         os.makedirs(os.path.join(BACKUP_FOLDER, 'log'))
-    with open(LOG_FILE, mode='a') as log_file:
+
+    logging.info('Israblog Batch Backup Script.')
+    logging.info('This script backs up posts, template and comments. WITHOUT IMAGES!')
+    backup_folder = input('Backup folder [ %s ]: ' % BACKUP_FOLDER)
+
+    if backup_folder:
+        BACKUP_FOLDER = backup_folder
+
+    blog_number_start = input("Blog Number to Start: ")  # Blog number. e.g. 11990
+    blog_number_end = input("Stop at blog number: ")
+
+    log_filename = os.path.join(BACKUP_FOLDER, 'log/backup_log_%s-%s_%s.csv' % (
+        blog_number_start, blog_number_end, datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')))
+
+    with open(log_filename, mode='a') as log_file:
         log_file.write(
             '"Blog Number","Posts","Comment Pages","Timestamp","Nickname","Email","age","Title","Description"\n')
-    for blog_number in range(BLOG_NUMBER_START, BLOG_NUMBER_END + 1):
+
+    blog_enum = 0
+    for blog_number in range(blog_number_start, blog_number_end + 1):
         blog_crawl = BlogCrawl(blog_number)
         blog_crawl.process_blog()
         if len(blog_crawl.posts) > 0:
-            with open(LOG_FILE, mode='a') as log_file:
+            blog_enum += 1
+            with open(log_filename, mode='a') as log_file:
                 line = '%d,%d,%d,%s,"%s","%s",%s,"%s","%s"\n' % (
                     blog_number,
                     len(blog_crawl.posts),
@@ -452,3 +467,5 @@ if __name__ == '__main__':
                     blog_crawl.title,
                     blog_crawl.description)
                 log_file.write(line.decode('windows-1255').encode('UTF-8'))
+
+    logging.info('Finished. Found %d blogs.' % blog_enum)
