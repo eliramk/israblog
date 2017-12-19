@@ -445,7 +445,7 @@ if __name__ == '__main__':
     blog_number_start = input("Blog Number to Start: ")  # Blog number. e.g. 11990
     blog_number_end = input("Stop at blog number: ")
 
-    log_filename = os.path.join(BACKUP_FOLDER, 'log/backup_log_%s-%s_%s.csv' % (
+    log_filename = os.path.join(BACKUP_FOLDER, 'log', 'backup_log_%s-%s_%s.csv' % (
         blog_number_start, blog_number_end, datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')))
 
     with open(log_filename, mode='a') as log_file:
