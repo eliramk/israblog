@@ -144,7 +144,9 @@ class BlogCrawl(object):
             logging.error('Could not encode post_html to UTF-8')
 
         date_obj = self.parse_date(post_html)
-        logging.info('Blog %s Post #%d [%s] %s', self.blog_number, len(self.posts), post_number, date_obj.strftime('%Y-%m-%d %H:%M') if date_obj else '')
+        post_title = self.search_re('<h2 class="title">(.*)</h2>', post_html)
+        logging.info('Blog %s Post #%d [%s] %s  %s', self.blog_number, len(self.posts), post_number,
+                     date_obj.strftime('%Y-%m-%d %H:%M') if date_obj else '', post_title)
 
         filename = os.path.join(self.blog_folder, 'post_%s.html' % post_number)
 
@@ -275,6 +277,7 @@ class BlogCrawl(object):
         if START_FROM_POST_NUMBER is None:
             initial_page = urllib2.urlopen(self.blog_url).read()
             next_post_url = None
+            next_post_number = None
             try:
                 next_post_url = re.search(self.re_post_url_pattern, initial_page).group(0).replace('&amp;', '&')
                 next_post_number = next_post_url.split('blogcode=')[1]
@@ -313,6 +316,8 @@ class BlogCrawl(object):
             self.read_months(initial_page)
 
         self.parse_blog_info(initial_page)
+        logging.info('Found blog %s by %s - %s', self.blog_number, self.nickname.decode('windows-1255').encode('UTF-8'),
+                     self.title.decode('windows-1255').encode('UTF-8'))
 
         # Scroll back from the latest post to the previous one, until you hit a broken link
         while next_post_number is not None:
@@ -397,26 +402,28 @@ class BlogCrawl(object):
     @staticmethod
     def search_re(regex, text):
         try:
-            return re.search(regex, text).group(1)
+            result = re.search(regex, text).group(1)  # type: str
+            return result.strip()
         except Exception as ex:
             return ''
 
     def parse_blog_info(self, initial_page):
         self.nickname = self.search_re('<b>כינוי:</b> (.*)<br>', initial_page)
         if self.nickname == '':
-            self.nickname = self.search_re('<script>displayEmail(\'list\',\'.*\',\'.*\',"(.*)")</script>', initial_page)
+            self.nickname = self.search_re('<script>displayEmail\(\'list\',\'.*\',\'.*\',"(.*)"\)</script>',
+                                           initial_page)
         if self.nickname == '':
-            self.nickname = self.search_re('displayEmail(\'blog\',\'.*\',\'.*\',"(.*)")', initial_page)
+            self.nickname = self.search_re('displayEmail\(\'blog\',\'.*\',\'.*\',"(.*)"\)', initial_page)
 
         self.age = self.search_re('<br></br><b>בן:</b> (.*)<br></br>', initial_page)
 
-        email_domain = self.search_re('<script>displayEmail(\'list\',\'.*\',\'(.*)\',".*")</script>', initial_page)
+        email_domain = self.search_re("<script>displayEmail\('list','.*','(.*)',\".*\"\)</script>", initial_page)
         if email_domain == '':
-            email_domain = self.search_re('displayEmail(\'blog\',\'.*\',\'(.*)\',".*")', initial_page)
-        email_user = self.search_re('<script>displayEmail(\'list\',\'(.*)\',\'.*\',".*")</script>', initial_page)
+            email_domain = self.search_re('displayEmail\(\'blog\',\'.*\',\'(.*)\',".*"\)', initial_page)
+        email_user = self.search_re('<script>displayEmail\(\'list\',\'(.*)\',\'.*\',".*"\)</script>', initial_page)
         if email_user == '':
-            email_user = self.search_re('displayEmail(\'blog\',\'(.*)\',\'.*\',".*")', initial_page)
-        self.email = '%s@%s' % (email_user, email_domain)
+            email_user = self.search_re('displayEmail\(\'blog\',\'(.*)\',\'.*\',".*"\)', initial_page)
+        self.email = '' if email_user == '' and email_domain == '' else '%s@%s' % (email_user, email_domain)
 
         self.title = self.search_re('<META property="og:title" content="(.*?)" />', initial_page) or self.search_re(
             '<h1 Class="TDtitle">(.*?)</h1>', initial_page)
@@ -426,14 +433,14 @@ class BlogCrawl(object):
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
 
-    logging.info('Israblog Batch Backup Script.')
+    logging.info('Israblog Batch Backup Script. Version 2')
     logging.info('This script backs up posts, template and comments. WITHOUT IMAGES!')
     default_backup_folder = '/users/eliram/Documents/israblog2'
 
     if not os.path.exists(default_backup_folder):
         default_backup_folder = os.path.dirname(os.path.realpath(__file__))
-
-    backup_folder = raw_input('Backup folder [ %s ]: ' % default_backup_folder)
+    print ''
+    backup_folder = raw_input('Specify Backup folder, or press ENTER to use [ %s ]: ' % default_backup_folder)
 
     if backup_folder:
         if not os.path.exists(backup_folder):
