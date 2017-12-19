@@ -12,19 +12,22 @@ import os
 from time import sleep
 import datetime
 
-BLOG_NUMBER_START = 860340  # A string containing the blog number. e.g. '11990'
-BLOG_NUMBER_END = 860350
+BLOG_NUMBER_START = 860344  # Blog number. e.g. 11990
+BLOG_NUMBER_END = 860344
 START_FROM_POST_NUMBER = None  # '3820213'  # Optional. Use None or a string containing the post number to move back from. e.g. '3754624'
 STOP_AT_POST_NUMBER = None  # '3708275'  # Optional
+SAVE_MONTHLY_PAGES = False
 
 BLOG_URL = 'http://israblog.nana10.co.il/blogread.asp?blog=%s'
 BASE_URL = 'http://israblog.nana10.co.il/blogread.asp'
 POST_URL = 'http://israblog.nana10.co.il/blogread.asp?blog=%s&blogcode=%s'
 COMMENTS_URL = 'http://israblog.nana10.co.il/comments.asp?blog=%s&user=%s'
+
 BACKUP_FOLDER = '/users/eliram/Documents/israblog2'
 if not os.path.exists(BACKUP_FOLDER):
     BACKUP_FOLDER = os.path.dirname(os.path.realpath(__file__))
-LOG_FILE = os.path.join(BACKUP_FOLDER, 'log/backup_%s-%s_%s.log' % (BLOG_NUMBER_START, BLOG_NUMBER_END, datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')))
+LOG_FILE = os.path.join(BACKUP_FOLDER, 'log/backup_%s-%s_%s.log' % (
+    BLOG_NUMBER_START, BLOG_NUMBER_END, datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')))
 
 # RegEx
 RE_POST_URL_PATTERN = '\?blog=%s&amp;blogcode=\d+'
@@ -32,6 +35,13 @@ RE_INITIAL_BLOG_CODE = 'blogcode=(\d+)'
 RE_PREVIOUS_POST = '<a title="לקטע הקודם" href="/blogread.asp\?blog=%s&amp;blogcode=(\d+)" class="blog">'
 RE_COMMENTS_NEXT_PAGE = 'href="comments\.asp\?.*&posnew=(\d+)">לדף הבא</a>'
 RE_TIMESTAMP = '(\d\d?/\d\d?/\d\d\d\d(\xc2\xa0|/s|&nbsp;|\xa0)\d\d?:\d\d)\r\n'
+RE_DROPDOWN = '<select name="PeriodsForUser".*>(<option.*/option>)</select>'
+RE_POST_ONLY = '(<table width="100%"><tr><td class="blog">.*)<iframe id='
+RE_COMMENTS_ONLY = "(<style>a:active.*)<a name='newcommentlocation'></a>"
+POST_ONLY_START = '<table width="100%"><tr><td class="blog">'
+POST_ONLY_END = '<iframe id='
+COMMENTS_ONLY_START = '<style>a:active'
+COMMENTS_ONLY_END = "<a name='newcommentlocation'></a>"
 
 
 class BlogPost(object):
@@ -45,6 +55,10 @@ class BlogPost(object):
 
 class BlogCrawl(object):
     def __init__(self, blog_number):
+        """
+
+        :param int blog_number:
+        """
         self.blog_number = blog_number  # type: int
         self.posts = {}
         self.comment_pages = 0
@@ -52,8 +66,17 @@ class BlogCrawl(object):
         self.re_previous_post = RE_PREVIOUS_POST % blog_number
         self.blog_folder = os.path.join(BACKUP_FOLDER, str(blog_number))
         self.current_post = None  # type: BlogPost
+        self.months = []
+        self.nickname = ''
+        self.email = ''
+        self.age = ''
+        self.title = ''
+        self.description = ''
+        self.save_template = True  # Save the first post with full html as well?
+        self.save_comments_template = True  # Save the first (recent) comments page without modifications
 
-    def get_next_page_number(self, comments_html, comments_page_number=None):
+    @staticmethod
+    def get_next_page_number(comments_html, comments_page_number=None):
         """
 
         :param str comments_html:
@@ -66,11 +89,11 @@ class BlogCrawl(object):
             if next_page != str(comments_page_number + 1):
                 logging.warning('NEXT PAGE IS %s while current page is %d', next_page, comments_page_number)
             else:
-                logging.info('Found comments page #%s' % next_page)
+                logging.debug('Found comments page #%s' % next_page)
         except Exception:
             if '>לדף הבא</a>' in comments_html:
                 next_page = comments_page_number + 1
-                logging.info('Trying next comments page #%s' % next_page)
+                logging.debug('Trying next comments page #%s' % next_page)
             else:
                 return None
 
@@ -102,7 +125,7 @@ class BlogCrawl(object):
         :return:
         :rtype: str
         """
-        post_html = urllib2.urlopen(post_url).read()
+        post_html = urllib2.urlopen(post_url).read()  # type: str
         self.current_post = BlogPost(post_number)
         self.posts[post_number] = self.current_post
 
@@ -118,14 +141,28 @@ class BlogCrawl(object):
         except Exception as ex:
             logging.error('Could not encode post_html to UTF-8')
 
-        # logging.debug(post_html)
-
         # post_number = re.search(RE_INITIAL_BLOG_CODE, post_url).group(1)
-        logging.info('Post #%s', post_number)
+        logging.info('Blog %s Post #%d [%s]', self.blog_number, len(self.posts), post_number)
 
         filename = os.path.join(self.blog_folder, 'post_%s.html' % post_number)
+
+        if self.save_template:
+            template_filename = os.path.join(self.blog_folder, 'template.html')
+            self.save_template = False
+            with open(template_filename, mode='w') as output_file:
+                output_file.write(post_html)
+
         with open(filename, mode='w') as output_file:
-            output_file.write(post_html)
+            try:
+                # minimum_html = re.search(RE_POST_ONLY, post_html).group(1)
+                data_start = post_html.index(POST_ONLY_START)
+                data_end = post_html.index(POST_ONLY_END)
+                minimum_html = '<HTML DIR="LTR" xmlns:ms="urn:schemas-microsoft-com:xslt"><head>' \
+                               '<meta charset="UTF-8">' \
+                               '<body>%s</body></HTML>' % post_html[data_start:data_end]
+                output_file.write(minimum_html)
+            except Exception as ex:
+                output_file.write(post_html)
 
         self.parse_date(post_html)
         if self.current_post.timestamp is not None:
@@ -134,7 +171,7 @@ class BlogCrawl(object):
         next_post_number = None
         try:
             next_post_number = re.search(self.re_previous_post, post_html).group(1)
-            logging.info('next_post_number=%s', next_post_number)
+            logging.debug('next_post_number=%s', next_post_number)
         except Exception:
             # logging.debug(post_html)
             # logging.debug(RE_PREVIOUS_POST)
@@ -145,10 +182,12 @@ class BlogCrawl(object):
         comments_url = self.get_comments_url(post_number)
 
         while comments_url is not None:
-            logging.info(comments_url)
+            logging.debug(comments_url)
             comments_html = urllib2.urlopen(comments_url).read()
             self.comment_pages += 1
+            self.current_post.comment_pages = comments_page_number
             try:
+                # We're also converting to unicode, because it's the right thing to do
                 comments_html = comments_html.decode("cp1255", errors='ignore')
                 comments_html = comments_html.encode('UTF-8', errors='ignore')
                 comments_html = comments_html.replace('text/html;charset=windows-1255', 'text/html;charset=utf-8')
@@ -161,8 +200,38 @@ class BlogCrawl(object):
                     post_number,
                     '_p%s' % comments_page_number if comments_page_number > 1 else ''))
             with open(comments_filename, mode='w') as output_file:
-                # We're also converting to unicode, because it's the right thing to do
-                output_file.write(comments_html)
+                if self.save_comments_template:
+                    output_file.write(comments_html)
+                    self.save_comments_template = False
+                else:
+                    try:
+                        data_start = comments_html.index(COMMENTS_ONLY_START)
+                        data_end = comments_html.index(COMMENTS_ONLY_END)
+
+                        minimum_html = '<html><head><meta http-equiv="content-type" ' \
+                                       'content="text/html;charset=utf-8" />' \
+                                       '<link rel="stylesheet" type="text/css" href="blog.css" />%s' \
+                                       '</td></tr></table></body></HTML>' % comments_html[data_start:data_end]
+                        """
+                        <style type="text/css">
+                        <!--
+                        p { margin: 0px;  }
+                        span.class_disabled {color: #808080;}
+                        body {
+                            scrollbar-face-color: #CCCCCC;
+                            scrollbar-highlight-color: #FFFFFF;
+                            scrollbar-3dlight-color: #FFFFFF;
+                            scrollbar-shadow-color: #FFFFFF;
+                            scrollbar-darkshadow-color: #FFFFFF;
+                            scrollbar-arrow-color: #FFFFFF;
+                            scrollbar-track-color: #FFFFFF;
+                        }
+                        -->
+                        </style>
+                        """
+                        output_file.write(minimum_html)
+                    except Exception as ex:
+                        output_file.write(comments_html)
             if self.current_post.timestamp is not None:
                 os.utime(comments_filename, (self.current_post.timestamp, self.current_post.timestamp))
 
@@ -172,6 +241,7 @@ class BlogCrawl(object):
             else:
                 comments_url = self.get_comments_url(post_number, comments_page_number)
 
+        self.current_post.comments_saved = True
         return next_post_number
 
     def get_post_url(self, post_number):
@@ -198,17 +268,19 @@ class BlogCrawl(object):
         :rtype:
         """
         blog_url = BLOG_URL % self.blog_number
+        initial_page = None
         if START_FROM_POST_NUMBER is None:
             initial_page = urllib2.urlopen(blog_url).read()
             try:
                 next_post_url = re.search(self.re_post_url_pattern, initial_page).group(0).replace('&amp;', '&')
                 next_post_number = next_post_url.split('blogcode=')[1]
-                logging.info(next_post_url)
+                logging.debug(next_post_url)
             except Exception as ex:
-                logging.error('Could not find post URL for blog %s', blog_url)
+                logging.warning('Could not find blog %s', blog_url)
                 return
 
             next_post_url = BASE_URL + next_post_url
+            self.read_months(initial_page)
         else:
             next_post_url = self.get_post_url(START_FROM_POST_NUMBER)
             next_post_number = STOP_AT_POST_NUMBER
@@ -216,8 +288,16 @@ class BlogCrawl(object):
         if not os.path.exists(self.blog_folder):
             os.makedirs(self.blog_folder)
 
+        if initial_page is not None:
+            filename = os.path.join(self.blog_folder, 'index.html')
+            with open(filename, mode='w') as output_file:
+                output_file.write(initial_page)
+
+        self.parse_blog_info(initial_page)
+
+        # Scroll back from the latest post to the previous one, until you hit a broken link
         while next_post_number is not None:
-            logging.debug('Post %s %s', next_post_number, next_post_url)
+            logging.debug('Post #%d [%s] %s', len(self.posts), next_post_number, next_post_url)
             next_post_number = self.process_post(next_post_url, next_post_number)
 
             if STOP_AT_POST_NUMBER and next_post_number and next_post_number == STOP_AT_POST_NUMBER:
@@ -231,15 +311,100 @@ class BlogCrawl(object):
             # Don't strain the server too much.
             sleep(0.1)
 
+        # Read the monthly pages, and download missing posts
+        for month_data in self.months:
+            self.crawl_month(month_data)
+
+    def read_months(self, page_html):
+        month_drop_down = re.search(RE_DROPDOWN, page_html).group(0)
+        months = month_drop_down.split('<option value="')
+        for month_str in months:
+            if re.match('\d\d?/\d{4}', month_str):
+                year = month_str.split('"')[0].split('/')[1]
+                month = month_str.split('"')[0].split('/')[0]
+                self.months.append(
+                    {
+                        'year': year,
+                        'month': month,
+                        'url': '&year=%s&month=%s' % (year, month)
+                    }
+                )
+
+    def crawl_month(self, month_data):
+        month_page_url = BLOG_URL % self.blog_number
+        month_page_url += month_data['url']
+        page_number = 1
+        while page_number > 0:
+            page_html = urllib2.urlopen(month_page_url).read()
+            logging.debug('%s%s page %d', month_data['year'], month_data['month'], page_number)
+            if SAVE_MONTHLY_PAGES:
+                page_filename = os.path.join(self.blog_folder, 'blog_%s_%s%s_%s.html' % (
+                    self.blog_number, month_data['year'], month_data['month'], str(page_number)))
+                with open(page_filename, mode='w') as page_file:
+                    page_file.write(page_html)
+            posts = re.findall(self.re_post_url_pattern, page_html)
+            for post_str in posts:
+                post_number = post_str.split('blogcode=')[1]
+                if self.posts.get(str(post_number), None) is None:
+                    logging.debug('Found Missing Post #%s', post_number)
+                    self.process_post(post_url=self.get_post_url(post_number), post_number=str(post_number))
+                else:
+                    logging.debug('Already got Post #%s, skipping', post_number)
+
+            # Check for next page
+            if re.search('[&;]pagenum=%s' % str(page_number + 1), page_html):
+                page_number += 1
+            else:
+                page_number = 0
+
+    @staticmethod
+    def search_re(regex, text):
+        try:
+            return re.search(regex, text).group(1)
+        except Exception as ex:
+            return ''
+
+    def parse_blog_info(self, initial_page):
+        self.nickname = self.search_re('<b>כינוי:</b> (.*)<br>', initial_page)
+        if self.nickname == '':
+            self.nickname = self.search_re('<script>displayEmail(\'list\',\'.*\',\'.*\',"(.*)")</script>', initial_page)
+        if self.nickname == '':
+            self.nickname = self.search_re('displayEmail(\'blog\',\'.*\',\'.*\',"(.*)")', initial_page)
+
+        self.age = self.search_re('<br></br><b>בן:</b> (.*)<br></br>', initial_page)
+
+        email_domain = self.search_re('<script>displayEmail(\'list\',\'.*\',\'(.*)\',".*")</script>', initial_page)
+        if email_domain == '':
+            email_domain = self.search_re('displayEmail(\'blog\',\'.*\',\'(.*)\',".*")', initial_page)
+        email_user = self.search_re('<script>displayEmail(\'list\',\'(.*)\',\'.*\',".*")</script>', initial_page)
+        if email_user == '':
+            email_user = self.search_re('displayEmail(\'blog\',\'(.*)\',\'.*\',".*")', initial_page)
+        self.email = '%s@%s' % (email_user, email_domain)
+
+        self.title = self.search_re('<META property="og:title" content="(.*?)" />', initial_page) or self.search_re(
+            '<h1 Class="TDtitle">(.*?)</h1>', initial_page)
+        self.description = self.search_re('<meta name="description" content="(.*?)" />', initial_page)
+
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     if not os.path.exists(os.path.join(BACKUP_FOLDER, 'log')):
         os.makedirs(os.path.join(BACKUP_FOLDER, 'log'))
     with open(LOG_FILE, mode='a') as log_file:
-        log_file.write('"Blog Number","Posts","Comment Pages","Timestamp"\n')
+        log_file.write(
+            '"Blog Number","Posts","Comment Pages","Timestamp","Nickname","Email","age","Title","Description"\n')
     for blog_number in range(BLOG_NUMBER_START, BLOG_NUMBER_END + 1):
         blog_crawl = BlogCrawl(str(blog_number))
         blog_crawl.process_blog()
         with open(LOG_FILE, mode='a') as log_file:
-            log_file.write('%d,%d,%d,%s\n' % (blog_number, len(blog_crawl.posts), blog_crawl.comment_pages, datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+            line = '%d,%d,%d,%s,"%s","%s",%s,"%s","%s"\n' % (
+                blog_number,
+                len(blog_crawl.posts),
+                blog_crawl.comment_pages,
+                datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                blog_crawl.nickname,
+                blog_crawl.email,
+                blog_crawl.age,
+                blog_crawl.title,
+                blog_crawl.description)
+            log_file.write(line.decode('windows-1255').encode('UTF-8'))
