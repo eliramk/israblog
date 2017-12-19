@@ -24,10 +24,6 @@ BASE_URL_TBLOG = 'http://israblog.nana10.co.il/tblogread.asp'
 POST_URL = 'http://israblog.nana10.co.il/blogread.asp?blog=%s&blogcode=%s'
 COMMENTS_URL = 'http://israblog.nana10.co.il/comments.asp?blog=%s&user=%s'
 
-BACKUP_FOLDER = '/users/eliram/Documents/israblog2'
-if not os.path.exists(BACKUP_FOLDER):
-    BACKUP_FOLDER = os.path.dirname(os.path.realpath(__file__))
-
 # RegEx
 RE_POST_URL_PATTERN = '\?blog=%s&a?m?p?;?blogcode=\d+'
 RE_INITIAL_BLOG_CODE = 'blogcode=(\d+)'
@@ -56,7 +52,7 @@ class BlogPost(object):
 
 
 class BlogCrawl(object):
-    def __init__(self, blog_number):
+    def __init__(self, blog_number, backup_folder):
         """
 
         :param int blog_number:
@@ -68,7 +64,7 @@ class BlogCrawl(object):
         self.re_previous_post = RE_PREVIOUS_POST % blog_number
         self.base_url = BASE_URL  # Could also be tblog
         self.blog_url = BLOG_URL % blog_number
-        self.blog_folder = os.path.join(BACKUP_FOLDER, str(blog_number))
+        self.blog_folder = os.path.join(backup_folder, str(blog_number))
         self.current_post = None  # type: BlogPost
         self.months = []
         self.nickname = ''
@@ -429,32 +425,39 @@ class BlogCrawl(object):
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
-    if not os.path.exists(os.path.join(BACKUP_FOLDER, 'log')):
-        os.makedirs(os.path.join(BACKUP_FOLDER, 'log'))
 
     logging.info('Israblog Batch Backup Script.')
     logging.info('This script backs up posts, template and comments. WITHOUT IMAGES!')
-    backup_folder = raw_input('Backup folder [ %s ]: ' % BACKUP_FOLDER)
+    default_backup_folder = '/users/eliram/Documents/israblog2'
+
+    if not os.path.exists(default_backup_folder):
+        default_backup_folder = os.path.dirname(os.path.realpath(__file__))
+
+    backup_folder = raw_input('Backup folder [ %s ]: ' % default_backup_folder)
 
     if backup_folder:
         if not os.path.exists(backup_folder):
             logging.error('Folder does not exist: %s' % backup_folder)
             exit(1)
-        BACKUP_FOLDER = backup_folder
+    else:
+        backup_folder = default_backup_folder
+
+    if not os.path.exists(os.path.join(backup_folder, 'log')):
+        os.makedirs(os.path.join(backup_folder, 'log'))
 
     blog_number_start = input("Blog Number to Start: ")  # Blog number. e.g. 11990
     blog_number_end = input("Stop at blog number: ")
 
-    log_filename = os.path.join(BACKUP_FOLDER, 'log', 'backup_log_%s-%s_%s.csv' % (
+    log_filename = os.path.join(backup_folder, 'log', 'backup_log_%s-%s_%s.csv' % (
         blog_number_start, blog_number_end, datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')))
 
-    with open(log_filename, mode='a') as log_file:
+    with open(log_filename, mode='a+') as log_file:
         log_file.write(
             '"Blog Number","Posts","Comment Pages","Timestamp","Nickname","Email","age","Title","Description"\n')
 
     blog_enum = 0
     for blog_number in range(blog_number_start, blog_number_end + 1):
-        blog_crawl = BlogCrawl(blog_number)
+        blog_crawl = BlogCrawl(blog_number, backup_folder)
         blog_crawl.process_blog()
         if len(blog_crawl.posts) > 0:
             blog_enum += 1
