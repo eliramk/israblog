@@ -12,14 +12,15 @@ import os
 from time import sleep
 import datetime
 
-BLOG_NUMBER_START = 860344  # Blog number. e.g. 11990
-BLOG_NUMBER_END = 860344
+BLOG_NUMBER_START = 101  # Blog number. e.g. 11990
+BLOG_NUMBER_END = 1000
 START_FROM_POST_NUMBER = None  # '3820213'  # Optional. Use None or a string containing the post number to move back from. e.g. '3754624'
 STOP_AT_POST_NUMBER = None  # '3708275'  # Optional
 SAVE_MONTHLY_PAGES = False
 
 BLOG_URL = 'http://israblog.nana10.co.il/blogread.asp?blog=%s'
 BASE_URL = 'http://israblog.nana10.co.il/blogread.asp'
+BASE_URL_TBLOG = 'http://israblog.nana10.co.il/tblogread.asp'
 POST_URL = 'http://israblog.nana10.co.il/blogread.asp?blog=%s&blogcode=%s'
 COMMENTS_URL = 'http://israblog.nana10.co.il/comments.asp?blog=%s&user=%s'
 
@@ -30,12 +31,15 @@ LOG_FILE = os.path.join(BACKUP_FOLDER, 'log/backup_%s-%s_%s.log' % (
     BLOG_NUMBER_START, BLOG_NUMBER_END, datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')))
 
 # RegEx
-RE_POST_URL_PATTERN = '\?blog=%s&amp;blogcode=\d+'
+RE_POST_URL_PATTERN = '\?blog=%s&a?m?p?;?blogcode=\d+'
 RE_INITIAL_BLOG_CODE = 'blogcode=(\d+)'
 RE_PREVIOUS_POST = '<a title="לקטע הקודם" href="/blogread.asp\?blog=%s&amp;blogcode=(\d+)" class="blog">'
 RE_COMMENTS_NEXT_PAGE = 'href="comments\.asp\?.*&posnew=(\d+)">לדף הבא</a>'
-RE_TIMESTAMP = '(\d\d?/\d\d?/\d\d\d\d(\xc2\xa0|/s|&nbsp;|\xa0)\d\d?:\d\d)\r\n'
+RE_TIMESTAMP = '(\d\d?/\d\d?/\d\d\d\d(\xc2\xa0|/s|&nbsp;|\xa0)\d\d?:\d\d)\r?\n'
 RE_DROPDOWN = '<select name="PeriodsForUser".*>(<option.*/option>)</select>'
+RE_DROPDOWN_T = '<select .*?name=\'selMonth\'.*\r?\n(<option.*/option>\r?\n)*</select>'
+# RE_DROPDOWN_T_START = '<select class=\'list\' name=\'selMonth\''
+# RE_DROPDOWN_T_END = </select>
 RE_POST_ONLY = '(<table width="100%"><tr><td class="blog">.*)<iframe id='
 RE_COMMENTS_ONLY = "(<style>a:active.*)<a name='newcommentlocation'></a>"
 POST_ONLY_START = '<table width="100%"><tr><td class="blog">'
@@ -64,6 +68,8 @@ class BlogCrawl(object):
         self.comment_pages = 0
         self.re_post_url_pattern = RE_POST_URL_PATTERN % blog_number
         self.re_previous_post = RE_PREVIOUS_POST % blog_number
+        self.base_url = BASE_URL  # Could also be tblog
+        self.blog_url = BLOG_URL % blog_number
         self.blog_folder = os.path.join(BACKUP_FOLDER, str(blog_number))
         self.current_post = None  # type: BlogPost
         self.months = []
@@ -74,6 +80,7 @@ class BlogCrawl(object):
         self.description = ''
         self.save_template = True  # Save the first post with full html as well?
         self.save_comments_template = True  # Save the first (recent) comments page without modifications
+        self.is_tblog = False
 
     @staticmethod
     def get_next_page_number(comments_html, comments_page_number=None):
@@ -103,7 +110,7 @@ class BlogCrawl(object):
         try:
             date_str = re.search(RE_TIMESTAMP, post_html).group(1)
         except AttributeError as ex:
-            return
+            return None
 
         date_array = date_str.split('\xc2\xa0')[0].split('/')
         time_array = date_str.split('\xc2\xa0')[1].split(':')
@@ -116,6 +123,7 @@ class BlogCrawl(object):
         # new_post.date_str = date_str
         ts = (date_obj - datetime.datetime(1970, 1, 1)).total_seconds()
         self.current_post.timestamp = ts
+        return date_obj
 
     def process_post(self, post_url, post_number):
         """
@@ -141,8 +149,8 @@ class BlogCrawl(object):
         except Exception as ex:
             logging.error('Could not encode post_html to UTF-8')
 
-        # post_number = re.search(RE_INITIAL_BLOG_CODE, post_url).group(1)
-        logging.info('Blog %s Post #%d [%s]', self.blog_number, len(self.posts), post_number)
+        date_obj = self.parse_date(post_html)
+        logging.info('Blog %s Post #%d [%s] %s', self.blog_number, len(self.posts), post_number, date_obj.strftime('%Y-%m-%d %H:%M'))
 
         filename = os.path.join(self.blog_folder, 'post_%s.html' % post_number)
 
@@ -164,7 +172,6 @@ class BlogCrawl(object):
             except Exception as ex:
                 output_file.write(post_html)
 
-        self.parse_date(post_html)
         if self.current_post.timestamp is not None:
             os.utime(filename, (self.current_post.timestamp, self.current_post.timestamp))
 
@@ -245,7 +252,10 @@ class BlogCrawl(object):
         return next_post_number
 
     def get_post_url(self, post_number):
-        return POST_URL % (self.blog_number, post_number)
+        url = POST_URL % (self.blog_number, post_number)
+        if self.is_tblog:
+            url = url.replace('blogread=', 'tblogread=')
+        return url
 
     def get_comments_url(self, post_number, page_number=1):
         """
@@ -267,20 +277,34 @@ class BlogCrawl(object):
 
         :rtype:
         """
-        blog_url = BLOG_URL % self.blog_number
         initial_page = None
         if START_FROM_POST_NUMBER is None:
-            initial_page = urllib2.urlopen(blog_url).read()
+            initial_page = urllib2.urlopen(self.blog_url).read()
+            next_post_url = None
             try:
                 next_post_url = re.search(self.re_post_url_pattern, initial_page).group(0).replace('&amp;', '&')
                 next_post_number = next_post_url.split('blogcode=')[1]
-                logging.debug(next_post_url)
             except Exception as ex:
-                logging.warning('Could not find blog %s', blog_url)
-                return
-
-            next_post_url = BASE_URL + next_post_url
-            self.read_months(initial_page)
+                # Check if this is a custom template blog
+                if re.match(
+                        '<script xmlns:ms="urn:schemas-microsoft-com:xslt">window\.location\.replace\(\'/tblogread.asp\' \+ document\.location\.search\);</script>',
+                        initial_page):
+                    self.is_tblog = True
+                    self.base_url = BASE_URL_TBLOG
+                    self.blog_url = self.blog_url.replace('blogread', 'tblogread')
+                else:
+                    logging.warning('Could not find blog %s', self.blog_url)
+                    return
+            if self.is_tblog:
+                initial_page = urllib2.urlopen(self.blog_url).read()
+                try:
+                    next_post_url = re.search(self.re_post_url_pattern, initial_page).group(0).replace('&amp;', '&')
+                    next_post_number = next_post_url.split('blogcode=')[1]
+                except Exception as ex:
+                    logging.warning('Could not find blog %s', self.blog_url)
+                    return
+            logging.debug(next_post_url)
+            next_post_url = self.base_url + next_post_url
         else:
             next_post_url = self.get_post_url(START_FROM_POST_NUMBER)
             next_post_number = STOP_AT_POST_NUMBER
@@ -292,6 +316,7 @@ class BlogCrawl(object):
             filename = os.path.join(self.blog_folder, 'index.html')
             with open(filename, mode='w') as output_file:
                 output_file.write(initial_page)
+            self.read_months(initial_page)
 
         self.parse_blog_info(initial_page)
 
@@ -316,9 +341,18 @@ class BlogCrawl(object):
             self.crawl_month(month_data)
 
     def read_months(self, page_html):
-        month_drop_down = re.search(RE_DROPDOWN, page_html).group(0)
-        months = month_drop_down.split('<option value="')
+        try:
+            month_drop_down = re.search(RE_DROPDOWN, page_html).group(0)
+        except Exception:
+            try:
+                month_drop_down = re.search(RE_DROPDOWN_T, page_html, flags=re.MULTILINE).group(0)
+            except Exception:
+                logging.error('Can not read months list on blog #%s', self.blog_number)
+                return
+
+        months = month_drop_down.replace('\r\n', '').replace('\n', '').split('<option value=')
         for month_str in months:
+            month_str = month_str.lstrip('"').lstrip("'")  # type: str
             if re.match('\d\d?/\d{4}', month_str):
                 year = month_str.split('"')[0].split('/')[1]
                 month = month_str.split('"')[0].split('/')[0]
@@ -329,10 +363,19 @@ class BlogCrawl(object):
                         'url': '&year=%s&month=%s' % (year, month)
                     }
                 )
+            elif re.match('\d{5,6}\'', month_str):
+                year = month_str[0:4]
+                month = month_str[4:6].rstrip("'")
+                self.months.append(
+                    {
+                        'year': year,
+                        'month': month,
+                        'url': '&year=%s&month=%s' % (year, month)
+                    }
+                )
 
     def crawl_month(self, month_data):
-        month_page_url = BLOG_URL % self.blog_number
-        month_page_url += month_data['url']
+        month_page_url = self.blog_url + month_data['url']
         page_number = 1
         while page_number > 0:
             page_html = urllib2.urlopen(month_page_url).read()
