@@ -12,7 +12,7 @@ import os
 from time import sleep
 import datetime
 
-BLOG_NUMBER_START = 101  # Blog number. e.g. 11990
+BLOG_NUMBER_START = 187  # Blog number. e.g. 11990
 BLOG_NUMBER_END = 1000
 START_FROM_POST_NUMBER = None  # '3820213'  # Optional. Use None or a string containing the post number to move back from. e.g. '3754624'
 STOP_AT_POST_NUMBER = None  # '3708275'  # Optional
@@ -150,7 +150,7 @@ class BlogCrawl(object):
             logging.error('Could not encode post_html to UTF-8')
 
         date_obj = self.parse_date(post_html)
-        logging.info('Blog %s Post #%d [%s] %s', self.blog_number, len(self.posts), post_number, date_obj.strftime('%Y-%m-%d %H:%M'))
+        logging.info('Blog %s Post #%d [%s] %s', self.blog_number, len(self.posts), post_number, date_obj.strftime('%Y-%m-%d %H:%M') if date_obj else '')
 
         filename = os.path.join(self.blog_folder, 'post_%s.html' % post_number)
 
@@ -437,17 +437,18 @@ if __name__ == '__main__':
         log_file.write(
             '"Blog Number","Posts","Comment Pages","Timestamp","Nickname","Email","age","Title","Description"\n')
     for blog_number in range(BLOG_NUMBER_START, BLOG_NUMBER_END + 1):
-        blog_crawl = BlogCrawl(str(blog_number))
+        blog_crawl = BlogCrawl(blog_number)
         blog_crawl.process_blog()
-        with open(LOG_FILE, mode='a') as log_file:
-            line = '%d,%d,%d,%s,"%s","%s",%s,"%s","%s"\n' % (
-                blog_number,
-                len(blog_crawl.posts),
-                blog_crawl.comment_pages,
-                datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                blog_crawl.nickname,
-                blog_crawl.email,
-                blog_crawl.age,
-                blog_crawl.title,
-                blog_crawl.description)
-            log_file.write(line.decode('windows-1255').encode('UTF-8'))
+        if len(blog_crawl.posts) > 0:
+            with open(LOG_FILE, mode='a') as log_file:
+                line = '%d,%d,%d,%s,"%s","%s",%s,"%s","%s"\n' % (
+                    blog_number,
+                    len(blog_crawl.posts),
+                    blog_crawl.comment_pages,
+                    datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    blog_crawl.nickname,
+                    blog_crawl.email,
+                    blog_crawl.age,
+                    blog_crawl.title,
+                    blog_crawl.description)
+                log_file.write(line.decode('windows-1255').encode('UTF-8'))
