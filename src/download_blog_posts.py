@@ -64,7 +64,9 @@ class BlogPost(object):
         self.saved = saved
         self.comments_saved = False
         self.comment_pages = 0
+        self.comments = 0
         self.timestamp = None  # type: int
+        self.post_title = ''
 
 
 class BlogCrawl(object):
@@ -77,6 +79,7 @@ class BlogCrawl(object):
         """
         self.blog_number = blog_number  # type: int
         self.posts = {}
+        self.posts_list = []
         self.comment_pages = 0
         self.re_post_url_pattern = RE_POST_URL_PATTERN % blog_number
         self.re_previous_post = RE_PREVIOUS_POST % blog_number
@@ -91,6 +94,7 @@ class BlogCrawl(object):
         self.age = ''
         self.title = ''
         self.description = ''
+        self.total_comments = 0
         self.save_template = True  # Save the first post with full html as well?
         self.save_comments_template = True  # Save the first (recent) comments page without modifications
         self.is_tblog = False
@@ -188,6 +192,7 @@ class BlogCrawl(object):
         post_html = urllib2.urlopen(post_url).read()  # type: str
         self.current_post = BlogPost(post_number)
         self.posts[post_number] = self.current_post
+        self.posts_list.insert(0, self.current_post)
 
         # We're also converting to unicode, because it's the right thing to do
         try:
@@ -203,9 +208,7 @@ class BlogCrawl(object):
 
         date_obj = self.parse_date(post_html)
         post_title = self.search_re('<h2 class="title">(.*)</h2>', post_html)
-        logging.info('Blog %s Post #%d [%s] %s  %s', self.blog_number, len(self.posts), post_number,
-                     date_obj.strftime('%Y-%m-%d %H:%M') if date_obj else '', post_title)
-
+        self.current_post.post_title = post_title
         filename = os.path.join(self.blog_folder, 'post_%s.html' % post_number)
 
         try:
@@ -308,6 +311,9 @@ class BlogCrawl(object):
             if self.current_post.timestamp is not None:
                 os.utime(comments_filename, (self.current_post.timestamp, self.current_post.timestamp))
 
+            comments_count = len(re.findall("<span class='comment'>", comments_html))
+            self.current_post.comments += comments_count
+            self.total_comments += comments_count
             comments_page_number = self.get_next_page_number(comments_html, comments_page_number=comments_page_number)
             if comments_page_number is None:
                 comments_url = None
@@ -315,6 +321,8 @@ class BlogCrawl(object):
                 comments_url = self.get_comments_url(post_number, comments_page_number)
 
         self.current_post.comments_saved = True
+        logging.info('Blog %s Post #%d [%s] %s [%d comments] %s', self.blog_number, len(self.posts), post_number,
+                     date_obj.strftime('%Y-%m-%d %H:%M') if date_obj else '', self.current_post.comments, post_title)
         return next_post_number
 
     def get_post_url(self, post_number):
@@ -503,7 +511,7 @@ class BlogCrawl(object):
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
 
-    logging.info('Israblog Batch Backup Script. Version 3')
+    logging.info('Israblog Batch Backup Script. Version 4')
 
     logging.info('This script backs up posts, template and comments.')
     default_backup_folder = '/users/eliram/Documents/israblog2'
@@ -534,10 +542,15 @@ if __name__ == '__main__':
 
     log_filename = os.path.join(backup_folder, 'log', 'backup_log_%s-%s_%s.csv' % (
         blog_number_start, blog_number_end, datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')))
+    log_posts_filename = os.path.join(backup_folder, 'log', 'backup_log_posts_%s-%s_%s.csv' % (
+        blog_number_start, blog_number_end, datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')))
 
     with open(log_filename, mode='a+') as log_file:
         log_file.write(
-            '"Blog Number","Posts","Comment Pages","Timestamp","Nickname","Email","age","Title","Description"\n')
+            '"Blog Number","Posts","Comment Pages","Timestamp","Nickname","Email","age","Title","Description","Comments"\n')
+    with open(log_posts_filename, mode='a+') as log_file:
+        log_file.write(
+            '"Blog Number","Post Number","Comments","Post Timestamp","Post Epoch","Post Title"\n')
 
     blog_enum = 0
     for blog_number in range(blog_number_start, blog_number_end + 1):
@@ -546,7 +559,7 @@ if __name__ == '__main__':
         if len(blog_crawl.posts) > 0:
             blog_enum += 1
             with open(log_filename, mode='a') as log_file:
-                line = '%d,%d,%d,%s,"%s","%s",%s,"%s","%s"\n' % (
+                line = '%d,%d,%d,%s,"%s","%s",%s,"%s","%s",%d\r\n' % (
                     blog_number,
                     len(blog_crawl.posts),
                     blog_crawl.comment_pages,
@@ -555,7 +568,19 @@ if __name__ == '__main__':
                     blog_crawl.email,
                     blog_crawl.age,
                     blog_crawl.title,
-                    blog_crawl.description)
+                    blog_crawl.description,
+                    blog_crawl.total_comments
+                )
                 log_file.write(line.decode('windows-1255').encode('UTF-8'))
+            with open(log_posts_filename, mode='a') as log_file:
+                for post in blog_crawl.posts_list:  # type: BlogPost
+                    line = '%d,%d,%d,"%s",%f,"%s"\r\n' % (
+                        blog_number,
+                        int(post.post_nubmer),
+                        post.comments,
+                        datetime.datetime.fromtimestamp(post.timestamp).strftime('%Y-%m-%d %H:%M:%S'),
+                        post.timestamp,
+                        post.post_title)
+                    log_file.write(line)
 
     logging.info('Finished. Found %d blogs.' % blog_enum)
