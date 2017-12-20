@@ -14,7 +14,7 @@ from time import sleep
 import datetime
 
 START_FROM_POST_NUMBER = None  # '3820213'  # Optional. Use None or a string containing the post number to move back from. e.g. '3754624'
-STOP_AT_POST_NUMBER = '12452501'  # '3708275'  # Optional
+STOP_AT_POST_NUMBER = None  # '12452501'  # Optional
 SAVE_MONTHLY_PAGES = False
 
 BLOG_URL = 'http://israblog.nana10.co.il/blogread.asp?blog=%s'
@@ -503,7 +503,8 @@ class BlogCrawl(object):
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
 
-    logging.info('Israblog Batch Backup Script. Version 2')
+    logging.info('Israblog Batch Backup Script. Version 3')
+
     logging.info('This script backs up posts, template and comments. WITHOUT IMAGES!')
     default_backup_folder = '/users/eliram/Documents/israblog2'
 
