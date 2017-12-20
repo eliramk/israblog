@@ -275,43 +275,51 @@ class BlogCrawl(object):
                 'post_%s_comments%s.html' % (
                     post_number,
                     '_p%s' % comments_page_number if comments_page_number > 1 else ''))
-            with open(comments_filename, mode='w') as output_file:
-                if self.save_comments_template:
-                    output_file.write(comments_html)
+            if self.save_comments_template:
+                comments_count = max(0, len(re.findall("<a name='", comments_html)) - 2)
+                if comments_count > 0:
                     self.save_comments_template = False
-                else:
-                    try:
-                        data_start = comments_html.index(COMMENTS_ONLY_START)
-                        data_end = comments_html.index(COMMENTS_ONLY_END)
-
-                        minimum_html = '<html><head><meta http-equiv="content-type" ' \
-                                       'content="text/html;charset=utf-8" />' \
-                                       '<link rel="stylesheet" type="text/css" href="blog.css" />%s' \
-                                       '</td></tr></table></body></HTML>' % comments_html[data_start:data_end]
-                        """
-                        <style type="text/css">
-                        <!--
-                        p { margin: 0px;  }
-                        span.class_disabled {color: #808080;}
-                        body {
-                            scrollbar-face-color: #CCCCCC;
-                            scrollbar-highlight-color: #FFFFFF;
-                            scrollbar-3dlight-color: #FFFFFF;
-                            scrollbar-shadow-color: #FFFFFF;
-                            scrollbar-darkshadow-color: #FFFFFF;
-                            scrollbar-arrow-color: #FFFFFF;
-                            scrollbar-track-color: #FFFFFF;
-                        }
-                        -->
-                        </style>
-                        """
-                        output_file.write(minimum_html)
-                    except Exception as ex:
+                    with open(comments_filename, mode='w') as output_file:
                         output_file.write(comments_html)
-            if self.current_post.timestamp is not None:
+            else:
+                try:
+                    data_start = comments_html.index(COMMENTS_ONLY_START)
+                    data_end = comments_html.index(COMMENTS_ONLY_END)
+
+                    minimum_html = '<html><head><meta http-equiv="content-type" ' \
+                                   'content="text/html;charset=utf-8" />' \
+                                   '<link rel="stylesheet" type="text/css" href="blog.css" />%s' \
+                                   '</td></tr></table></body></HTML>' % comments_html[data_start:data_end]
+                    """
+                    <style type="text/css">
+                    <!--
+                    p { margin: 0px;  }
+                    span.class_disabled {color: #808080;}
+                    body {
+                        scrollbar-face-color: #CCCCCC;
+                        scrollbar-highlight-color: #FFFFFF;
+                        scrollbar-3dlight-color: #FFFFFF;
+                        scrollbar-shadow-color: #FFFFFF;
+                        scrollbar-darkshadow-color: #FFFFFF;
+                        scrollbar-arrow-color: #FFFFFF;
+                        scrollbar-track-color: #FFFFFF;
+                    }
+                    -->
+                    </style>
+                    """
+                    comments_count = len(re.findall("<a name='", minimum_html))
+                    if comments_count > 0:
+                        with open(comments_filename, mode='w') as output_file:
+                            output_file.write(minimum_html)
+                except Exception as ex:
+                    comments_count = max(0, len(re.findall("<a name='", comments_html)) - 2)
+                    if comments_count > 0:
+                        with open(comments_filename, mode='w') as output_file:
+                            output_file.write(comments_html)
+
+            if self.current_post.timestamp is not None and os.path.exists(comments_filename):
                 os.utime(comments_filename, (self.current_post.timestamp, self.current_post.timestamp))
 
-            comments_count = len(re.findall("<span class='comment'>", comments_html))
             self.current_post.comments += comments_count
             self.total_comments += comments_count
             comments_page_number = self.get_next_page_number(comments_html, comments_page_number=comments_page_number)
@@ -511,7 +519,7 @@ class BlogCrawl(object):
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
 
-    logging.info('Israblog Batch Backup Script. Version 4')
+    logging.info('Israblog Batch Backup Script. Version 5')
 
     logging.info('This script backs up posts, template and comments.')
     default_backup_folder = '/users/eliram/Documents/israblog2'
@@ -574,12 +582,12 @@ if __name__ == '__main__':
                 log_file.write(line.decode('windows-1255').encode('UTF-8'))
             with open(log_posts_filename, mode='a') as log_file:
                 for post in blog_crawl.posts_list:  # type: BlogPost
-                    line = '%d,%d,%d,"%s",%f,"%s"\r\n' % (
+                    line = '%d,%d,%d,"%s",%d,"%s"\r\n' % (
                         blog_number,
                         int(post.post_nubmer),
                         post.comments,
                         datetime.datetime.fromtimestamp(post.timestamp).strftime('%Y-%m-%d %H:%M:%S'),
-                        post.timestamp,
+                        int(post.timestamp),
                         post.post_title)
                     log_file.write(line)
 
