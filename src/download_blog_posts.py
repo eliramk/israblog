@@ -175,9 +175,12 @@ class BlogCrawl(object):
                 full_filename = os.path.join(images_folder, filename)
 
             used_filenames.append(full_filename)
-            if not os.path.exists(full_filename):
-                urllib.urlretrieve(link, full_filename)
-            modified_html = modified_html.replace(link, relative_path + filename)
+            try:
+                if not os.path.exists(full_filename):
+                    urllib.urlretrieve(link, full_filename)
+                modified_html = modified_html.replace(link, relative_path + filename)
+            except Exception:
+                logging.error('Post %s Could not download %s to file %s', post_number, link, full_filename)
 
         return modified_html
 
@@ -520,7 +523,7 @@ class BlogCrawl(object):
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
 
-    logging.info('Israblog Batch Backup Script. Version 5')
+    logging.info('Israblog Batch Backup Script. Version 6')
 
     logging.info('This script backs up posts, template and comments.')
     default_backup_folder = '/users/eliram/Documents/israblog2'
