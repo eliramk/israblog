@@ -65,7 +65,7 @@ class BlogPost(object):
         self.comments_saved = False
         self.comment_pages = 0
         self.comments = 0
-        self.timestamp = None  # type: int
+        self.timestamp = None  # type: float
         self.post_title = ''
 
 
@@ -586,8 +586,9 @@ if __name__ == '__main__':
                         blog_number,
                         int(post.post_nubmer),
                         post.comments,
-                        datetime.datetime.fromtimestamp(post.timestamp).strftime('%Y-%m-%d %H:%M:%S'),
-                        int(post.timestamp),
+                        datetime.datetime.fromtimestamp(post.timestamp).strftime(
+                            '%Y-%m-%d %H:%M:%S') if post.timestamp else '',
+                        int(post.timestamp) if post.timestamp else '',
                         post.post_title)
                     log_file.write(line)
 
