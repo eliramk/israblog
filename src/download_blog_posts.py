@@ -582,13 +582,13 @@ if __name__ == '__main__':
                 log_file.write(line.decode('windows-1255').encode('UTF-8'))
             with open(log_posts_filename, mode='a') as log_file:
                 for post in blog_crawl.posts_list:  # type: BlogPost
-                    line = '%d,%d,%d,"%s",%d,"%s"\r\n' % (
+                    line = '%d,%d,%d,"%s",%s,"%s"\r\n' % (
                         blog_number,
                         int(post.post_nubmer),
                         post.comments,
                         datetime.datetime.fromtimestamp(post.timestamp).strftime(
                             '%Y-%m-%d %H:%M:%S') if post.timestamp else '',
-                        int(post.timestamp) if post.timestamp else '',
+                        str(int(post.timestamp)) if post.timestamp else '',
                         post.post_title)
                     log_file.write(line)
 
