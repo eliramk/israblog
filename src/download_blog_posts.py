@@ -505,7 +505,7 @@ if __name__ == '__main__':
 
     logging.info('Israblog Batch Backup Script. Version 3')
 
-    logging.info('This script backs up posts, template and comments. WITHOUT IMAGES!')
+    logging.info('This script backs up posts, template and comments.')
     default_backup_folder = '/users/eliram/Documents/israblog2'
 
     if not os.path.exists(default_backup_folder):
@@ -527,6 +527,10 @@ if __name__ == '__main__':
     blog_number_end = input("Stop at blog number: ")
 
     backup_images = blog_number_start == blog_number_end
+    if backup_images:
+        logging.info('Downloading a single blog - WITH IMAGES')
+    else:
+        logging.info('Downloading multiple blogs - Images are NOT saved. To backup images, download a single blog.')
 
     log_filename = os.path.join(backup_folder, 'log', 'backup_log_%s-%s_%s.csv' % (
         blog_number_start, blog_number_end, datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')))
