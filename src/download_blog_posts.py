@@ -5,6 +5,7 @@
 Try to download all posts for a certain blog (html only, post-by-post)
 """
 
+import urllib
 import urllib2
 import logging
 import re
@@ -12,10 +13,8 @@ import os
 from time import sleep
 import datetime
 
-# BLOG_NUMBER_START = 187  # Blog number. e.g. 11990
-# BLOG_NUMBER_END = 1000
 START_FROM_POST_NUMBER = None  # '3820213'  # Optional. Use None or a string containing the post number to move back from. e.g. '3754624'
-STOP_AT_POST_NUMBER = None  # '3708275'  # Optional
+STOP_AT_POST_NUMBER = '12452501'  # '3708275'  # Optional
 SAVE_MONTHLY_PAGES = False
 
 BLOG_URL = 'http://israblog.nana10.co.il/blogread.asp?blog=%s'
@@ -32,6 +31,7 @@ RE_COMMENTS_NEXT_PAGE = 'href="comments\.asp\?.*&posnew=(\d+)">לדף הבא</a>
 RE_TIMESTAMP = '(\d\d?/\d\d?/\d\d\d\d(\xc2\xa0|/s|&nbsp;|\xa0)\d\d?:\d\d)\r?\n'
 RE_DROPDOWN = '<select name="PeriodsForUser".*>(<option.*/option>)</select>'
 RE_DROPDOWN_T = '<select .*?name=\'selMonth\'.*\r?\n(<option.*/option>\r?\n)*</select>'
+RE_IMAGE_URL = 'https?:\/\/(?:[a-z\-]+\.)+[a-z]{2,6}(?:\/[^\/#?]+)+\.(?:jpe?g|gif|png|css)'
 # RE_DROPDOWN_T_START = '<select class=\'list\' name=\'selMonth\''
 # RE_DROPDOWN_T_END = </select>
 RE_POST_ONLY = '(<table width="100%"><tr><td class="blog">.*)<iframe id='
@@ -40,6 +40,22 @@ POST_ONLY_START = '<table width="100%"><tr><td class="blog">'
 POST_ONLY_END = '<iframe id='
 COMMENTS_ONLY_START = '<style>a:active'
 COMMENTS_ONLY_END = "<a name='newcommentlocation'></a>"
+
+COMMON_TEMPLATE_IMAGES = [
+    'http://f.nanafiles.co.il/Partner48/Service87/Images/Header/headerBGGrad11.png',
+    'http://f.nanafiles.co.il/Partner48/Service87/Images/\\Header\\IsraLogo11.png',
+    'http://f.nanafiles.co.il/Partner48/Service87/Images/\\Header\\NanaLogo11.png',
+    'http://f.nanafiles.co.il/Partner48/Service87/Images/israblog_radio_off.gif',
+    'http://f.nanafiles.co.il/Partner48/Service87/Images/israblog_radio_on.gif',
+    'http://f.nanafiles.co.il/Partner48/Service87/Images/lineBG.gif',
+    'http://f.nanafiles.co.il/Partner1/Service87/Images/sign_in_button.gif',
+    'http://f.nanafiles.co.il/Partner48/Service87/Images/israblogcellular.gif',
+    'http://f.nanafiles.co.il/Common/Images/pixel.gif',
+
+    'http://f.nanafiles.co.il/Partner1/Service87/Styles/Styles_1_87.css',
+    'http://f.nanafiles.co.il/Partner48/Service87/Styles/Header.css',
+    'http://f.nanafiles.co.il/Partner48/Service87/Styles/combobox.css',
+]
 
 
 class BlogPost(object):
@@ -52,10 +68,12 @@ class BlogPost(object):
 
 
 class BlogCrawl(object):
-    def __init__(self, blog_number, backup_folder):
+    def __init__(self, blog_number, backup_folder, backup_images=False):
         """
 
         :param int blog_number:
+        :param str backup_folder:
+        :param bool backup_images:
         """
         self.blog_number = blog_number  # type: int
         self.posts = {}
@@ -64,6 +82,7 @@ class BlogCrawl(object):
         self.re_previous_post = RE_PREVIOUS_POST % blog_number
         self.base_url = BASE_URL  # Could also be tblog
         self.blog_url = BLOG_URL % blog_number
+        self.backup_folder = backup_folder
         self.blog_folder = os.path.join(backup_folder, str(blog_number))
         self.current_post = None  # type: BlogPost
         self.months = []
@@ -75,6 +94,7 @@ class BlogCrawl(object):
         self.save_template = True  # Save the first post with full html as well?
         self.save_comments_template = True  # Save the first (recent) comments page without modifications
         self.is_tblog = False
+        self.backup_images = backup_images
 
     @staticmethod
     def get_next_page_number(comments_html, comments_page_number=None):
@@ -119,6 +139,44 @@ class BlogCrawl(object):
         self.current_post.timestamp = ts
         return date_obj
 
+    def download_page_images(self, post_html, post_number='template'):
+        relative_folder = 'template' if post_number == 'template' else 'pics'
+        images_folder = os.path.join(self.blog_folder, relative_folder)
+        image_links = re.findall(RE_IMAGE_URL, post_html, flags=re.IGNORECASE)
+        if len(image_links) > 0 and not os.path.exists(images_folder):
+            os.makedirs(images_folder)
+        enum = 0
+        downloaded_images = []
+        used_filenames = []
+        modified_html = post_html
+        for link in image_links:
+            if link in downloaded_images:
+                continue
+
+            downloaded_images.append(link)
+            enum += 1
+            filename = link.split('/')[-1].split('\\')[-1]
+            full_filename = os.path.join(images_folder, filename)
+            if link in COMMON_TEMPLATE_IMAGES:
+                full_filename = os.path.join(self.backup_folder, 'main_template', filename)
+                if not os.path.exists(os.path.join(self.backup_folder, 'main_template')):
+                    os.makedirs(os.path.join(self.backup_folder, 'main_template'))
+                relative_path = '../main_template/'
+            else:
+                relative_path = './' + relative_folder + '/'
+
+            if full_filename in used_filenames:
+                enum += 1
+                filename = filename.replace('.', '_%d.' % enum)
+                full_filename = os.path.join(images_folder, filename)
+
+            used_filenames.append(full_filename)
+            if not os.path.exists(full_filename):
+                urllib.urlretrieve(link, full_filename)
+            modified_html = modified_html.replace(link, relative_path + filename)
+
+        return modified_html
+
     def process_post(self, post_url, post_number):
         """
 
@@ -150,23 +208,35 @@ class BlogCrawl(object):
 
         filename = os.path.join(self.blog_folder, 'post_%s.html' % post_number)
 
+        try:
+            data_start = post_html.index(POST_ONLY_START)
+            data_end = post_html.index(POST_ONLY_END)
+            data_html = post_html[data_start:data_end]
+            template_html = post_html[:data_start] + '<!-- POST_PLACE_HOLDER -->' + post_html[data_end:]
+            # remove iframes, like the facebook button etc.
+            iframes = re.findall('<iframe.*?/iframe>', data_html)
+            for iframe in iframes:
+                data_html.replace(iframe, '')
+            minimum_html = '<HTML DIR="RTL" xmlns:ms="urn:schemas-microsoft-com:xslt"><head>' \
+                           '<meta charset="UTF-8">' \
+                           '<body>%s</body></HTML>' % data_html
+        except Exception as ex:
+            minimum_html = post_html
+            template_html = post_html
+
+        if self.backup_images:
+            minimum_html = self.download_page_images(minimum_html, post_number)
+
+        with open(filename, mode='w') as output_file:
+            output_file.write(minimum_html)
+
         if self.save_template:
             template_filename = os.path.join(self.blog_folder, 'template.html')
             self.save_template = False
+            if self.backup_images:
+                template_html = self.download_page_images(template_html, 'template')
             with open(template_filename, mode='w') as output_file:
-                output_file.write(post_html)
-
-        with open(filename, mode='w') as output_file:
-            try:
-                # minimum_html = re.search(RE_POST_ONLY, post_html).group(1)
-                data_start = post_html.index(POST_ONLY_START)
-                data_end = post_html.index(POST_ONLY_END)
-                minimum_html = '<HTML DIR="LTR" xmlns:ms="urn:schemas-microsoft-com:xslt"><head>' \
-                               '<meta charset="UTF-8">' \
-                               '<body>%s</body></HTML>' % post_html[data_start:data_end]
-                output_file.write(minimum_html)
-            except Exception as ex:
-                output_file.write(post_html)
+                output_file.write(template_html)
 
         if self.current_post.timestamp is not None:
             os.utime(filename, (self.current_post.timestamp, self.current_post.timestamp))
@@ -455,6 +525,8 @@ if __name__ == '__main__':
     blog_number_start = input("Blog Number to Start: ")  # Blog number. e.g. 11990
     blog_number_end = input("Stop at blog number: ")
 
+    backup_images = blog_number_start == blog_number_end
+
     log_filename = os.path.join(backup_folder, 'log', 'backup_log_%s-%s_%s.csv' % (
         blog_number_start, blog_number_end, datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')))
 
@@ -464,7 +536,7 @@ if __name__ == '__main__':
 
     blog_enum = 0
     for blog_number in range(blog_number_start, blog_number_end + 1):
-        blog_crawl = BlogCrawl(blog_number, backup_folder)
+        blog_crawl = BlogCrawl(blog_number, backup_folder, backup_images=backup_images)
         blog_crawl.process_blog()
         if len(blog_crawl.posts) > 0:
             blog_enum += 1
