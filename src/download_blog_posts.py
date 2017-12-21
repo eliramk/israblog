@@ -340,10 +340,12 @@ class BlogCrawl(object):
                 comments_url = self.get_comments_url(post_number, comments_page_number)
 
         self.current_post.comments_saved = True
-
+        if platform != 'darwin':
+            post_title = u''.join(reversed(post_title.decode('UTF-8')))  # [::-1]
+            post_title = post_title.encode('UTF-8')
         logging.info('Blog %s Post #%d [%s] %s [%d comments] %s', self.blog_number, len(self.posts), post_number,
-                     date_obj.strftime('%Y-%m-%d %H:%M') if date_obj else '', self.current_post.comments,
-                     post_title if platform == 'darwin' else post_title[::-1])
+                     date_obj.strftime('%Y-%m-%d %H:%M') if date_obj else '', self.current_post.comments, post_title)
+
         return next_post_number
 
     def get_post_url(self, post_number):
