@@ -615,5 +615,7 @@ if __name__ == '__main__':
                         post.post_title)
                     log_file.write(line)
 
-    logging.info('Finished. Found %d blogs.' % blog_enum)
+    ratio = blog_enum * 100 / (blog_number_end - blog_number_start + 1)
+    logging.info('Finished. Found %d blogs in range %d-%d. Ratio %d percent' % (
+        blog_enum, blog_number_start, blog_number_end, ratio))
     wait = raw_input('Press ENTER')
