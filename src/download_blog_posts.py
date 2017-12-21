@@ -420,8 +420,8 @@ class BlogCrawl(object):
             title = self.title.decode('windows-1255').encode('UTF-8')
         else:
             # reverse strings
-            nick = self.nickname[::-1].decode('windows-1255').encode('UTF-8')
-            title = self.title[::-1].decode('windows-1255').encode('UTF-8')
+            nick = self.nickname.decode('windows-1255')[::-1].encode('UTF-8')
+            title = self.title.decode('windows-1255')[::-1].encode('UTF-8')
 
         logging.info('Found blog %s by %s - %s', self.blog_number, nick, title)
 
