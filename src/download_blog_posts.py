@@ -12,6 +12,7 @@ import re
 import os
 from time import sleep
 import datetime
+import sys
 
 START_FROM_POST_NUMBER = None  # '3820213'  # Optional. Use None or a string containing the post number to move back from. e.g. '3754624'
 STOP_AT_POST_NUMBER = None  # '12452501'  # Optional
@@ -40,6 +41,8 @@ POST_ONLY_START = '<table width="100%"><tr><td class="blog">'
 POST_ONLY_END = '<iframe id='
 COMMENTS_ONLY_START = '<style>a:active'
 COMMENTS_ONLY_END = "<a name='newcommentlocation'></a>"
+
+platform = sys.platform
 
 COMMON_TEMPLATE_IMAGES = [
     'http://f.nanafiles.co.il/Partner48/Service87/Images/Header/headerBGGrad11.png',
@@ -139,7 +142,11 @@ class BlogCrawl(object):
                                      int(time_array[1]),
                                      0)
         # new_post.date_str = date_str
-        ts = (date_obj - datetime.datetime(1970, 1, 1)).total_seconds()
+        if int(date_array[2]) < 1970:
+            # Fake date
+            ts = 0
+        else:
+            ts = (date_obj - datetime.datetime(1970, 1, 1)).total_seconds()
         self.current_post.timestamp = ts
         return date_obj
 
@@ -333,8 +340,10 @@ class BlogCrawl(object):
                 comments_url = self.get_comments_url(post_number, comments_page_number)
 
         self.current_post.comments_saved = True
+
         logging.info('Blog %s Post #%d [%s] %s [%d comments] %s', self.blog_number, len(self.posts), post_number,
-                     date_obj.strftime('%Y-%m-%d %H:%M') if date_obj else '', self.current_post.comments, post_title)
+                     date_obj.strftime('%Y-%m-%d %H:%M') if date_obj else '', self.current_post.comments,
+                     post_title if platform == 'darwin' else post_title[::-1])
         return next_post_number
 
     def get_post_url(self, post_number):
@@ -406,8 +415,15 @@ class BlogCrawl(object):
             self.read_months(initial_page)
 
         self.parse_blog_info(initial_page)
-        logging.info('Found blog %s by %s - %s', self.blog_number, self.nickname.decode('windows-1255').encode('UTF-8'),
-                     self.title.decode('windows-1255').encode('UTF-8'))
+        if platform == 'darwin':
+            nick = self.nickname.decode('windows-1255').encode('UTF-8')
+            title = self.title.decode('windows-1255').encode('UTF-8')
+        else:
+            # reverse strings
+            nick = self.nickname[::-1].decode('windows-1255').encode('UTF-8')
+            title = self.title[::-1].decode('windows-1255').encode('UTF-8')
+
+        logging.info('Found blog %s by %s - %s', self.blog_number, nick, title)
 
         # Scroll back from the latest post to the previous one, until you hit a broken link
         while next_post_number is not None:
@@ -524,13 +540,23 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
 
     logging.info('Israblog Batch Backup Script. Version 6')
+    logging.info('This script backs up posts, template and comments. [running on %s]' % platform)
 
-    logging.info('This script backs up posts, template and comments.')
+    blog_number_start = input("Blog Number to Start: ")  # Blog number. e.g. 11990
+    blog_number_end = input("Stop at blog number: ")
+
+    backup_images = blog_number_start == blog_number_end
+    if backup_images:
+        logging.info('Downloading a single blog - WITH IMAGES')
+    else:
+        logging.info('Downloading multiple blogs - Images are NOT saved. To backup images, download a single blog.')
+
     default_backup_folder = '/users/eliram/Documents/israblog2'
 
     if not os.path.exists(default_backup_folder):
         default_backup_folder = os.path.dirname(os.path.realpath(__file__))
     print ''
+
     backup_folder = raw_input('Specify Backup folder, or press ENTER to use [ %s ]: ' % default_backup_folder)
 
     if backup_folder:
@@ -542,15 +568,6 @@ if __name__ == '__main__':
 
     if not os.path.exists(os.path.join(backup_folder, 'log')):
         os.makedirs(os.path.join(backup_folder, 'log'))
-
-    blog_number_start = input("Blog Number to Start: ")  # Blog number. e.g. 11990
-    blog_number_end = input("Stop at blog number: ")
-
-    backup_images = blog_number_start == blog_number_end
-    if backup_images:
-        logging.info('Downloading a single blog - WITH IMAGES')
-    else:
-        logging.info('Downloading multiple blogs - Images are NOT saved. To backup images, download a single blog.')
 
     log_filename = os.path.join(backup_folder, 'log', 'backup_log_%s-%s_%s.csv' % (
         blog_number_start, blog_number_end, datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')))
@@ -597,3 +614,4 @@ if __name__ == '__main__':
                     log_file.write(line)
 
     logging.info('Finished. Found %d blogs.' % blog_enum)
+    wait = raw_input('Press ENTER')
