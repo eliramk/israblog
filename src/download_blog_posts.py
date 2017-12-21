@@ -340,7 +340,7 @@ class BlogCrawl(object):
                 comments_url = self.get_comments_url(post_number, comments_page_number)
 
         self.current_post.comments_saved = True
-        if platform != 'darwin':
+        if platform != 'darwin' and not re.search('[A-Za-z]', post_title):  # Don't reverse english titles
             post_title = u''.join(reversed(post_title.decode('UTF-8')))  # [::-1]
             post_title = post_title.encode('UTF-8')
         logging.info('Blog %s Post #%d [%s] %s [%d comments] %s', self.blog_number, len(self.posts), post_number,
@@ -417,7 +417,7 @@ class BlogCrawl(object):
             self.read_months(initial_page)
 
         self.parse_blog_info(initial_page)
-        if platform == 'darwin':
+        if platform == 'darwin' or re.search('[A-Za-z]', self.title):
             nick = self.nickname.decode('windows-1255').encode('UTF-8')
             title = self.title.decode('windows-1255').encode('UTF-8')
         else:
