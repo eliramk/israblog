@@ -548,7 +548,7 @@ class BlogCrawl(object):
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
 
-    logging.info('Israblog Batch Backup Script. Version 7')
+    logging.info('Israblog Batch Backup Script. Version 8')
     logging.info('This script backs up posts, template and comments. [running on %s]' % platform)
 
     blog_number_start = input("Blog Number to Start: ")  # Blog number. e.g. 11990
