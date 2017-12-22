@@ -391,8 +391,12 @@ class BlogCrawl(object):
                     self.base_url = BASE_URL_TBLOG
                     self.blog_url = self.blog_url.replace('blogread', 'tblogread')
                 else:
+                    if 'window.location.replace(\'/noblog.htm\');' in initial_page:
+                        logging.info('No blog #%s', str(self.blog_number))
+                        return 'no_blog'
                     logging.warning('Could not find blog %s', self.blog_url)
-                    return
+                    self.parse_blog_info(initial_page)
+                    return 'blog_empty'
             if self.is_tblog:
                 initial_page = urllib2.urlopen(self.blog_url).read()
                 try:
@@ -400,7 +404,9 @@ class BlogCrawl(object):
                     next_post_number = next_post_url.split('blogcode=')[1]
                 except Exception as ex:
                     logging.warning('Could not find blog %s', self.blog_url)
-                    return
+                    self.parse_blog_info(initial_page)
+                    return 'tblog_empty'
+
             logging.debug(next_post_url)
             next_post_url = self.base_url + next_post_url
         else:
@@ -446,6 +452,7 @@ class BlogCrawl(object):
         # Read the monthly pages, and download missing posts
         for month_data in self.months:
             self.crawl_month(month_data)
+        return 'blog'
 
     def read_months(self, page_html):
         try:
@@ -553,7 +560,7 @@ if __name__ == '__main__':
     else:
         logging.info('Downloading multiple blogs - Images are NOT saved. To backup images, download a single blog.')
 
-    default_backup_folder = '/users/eliram/Documents/israblog2'
+    default_backup_folder = '/users/eliram/Documents/israblog3'
 
     if not os.path.exists(default_backup_folder):
         default_backup_folder = os.path.dirname(os.path.realpath(__file__))
@@ -584,10 +591,12 @@ if __name__ == '__main__':
             '"Blog Number","Post Number","Comments","Post Timestamp","Post Epoch","Post Title"\n')
 
     blog_enum = 0
+    results = {}
     for blog_number in range(blog_number_start, blog_number_end + 1):
         blog_crawl = BlogCrawl(blog_number, backup_folder, backup_images=backup_images)
-        blog_crawl.process_blog()
-        if len(blog_crawl.posts) > 0:
+        result = blog_crawl.process_blog()
+        results[result] = results.get(result, 0) + 1
+        if len(blog_crawl.posts) > 0 or result != 'no_blog':
             blog_enum += 1
             with open(log_filename, mode='a') as log_file:
                 line = '%d,%d,%d,%s,"%s","%s",%s,"%s","%s",%d\r\n' % (
@@ -603,6 +612,8 @@ if __name__ == '__main__':
                     blog_crawl.total_comments
                 )
                 log_file.write(line.decode('windows-1255').encode('UTF-8'))
+
+        if len(blog_crawl.posts) > 0:
             with open(log_posts_filename, mode='a') as log_file:
                 for post in blog_crawl.posts_list:  # type: BlogPost
                     line = '%d,%d,%d,"%s",%s,"%s"\r\n' % (
@@ -618,4 +629,5 @@ if __name__ == '__main__':
     ratio = blog_enum * 100 / (blog_number_end - blog_number_start + 1)
     logging.info('Finished. Found %d blogs in range %d-%d. Ratio %d percent' % (
         blog_enum, blog_number_start, blog_number_end, ratio))
+    logging.info('Results: %s', results)
     wait = raw_input('Press ENTER')
