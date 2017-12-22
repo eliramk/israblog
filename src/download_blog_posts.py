@@ -4,6 +4,7 @@
 """
 Try to download all posts for a certain blog (html only, post-by-post)
 """
+__author__ = 'eliram'
 
 import urllib
 import urllib2
@@ -14,6 +15,11 @@ from time import sleep
 import datetime
 import sys
 
+try:
+    from awscli.compat import raw_input
+except ImportError:
+    pass
+
 START_FROM_POST_NUMBER = None  # '3820213'  # Optional. Use None or a string containing the post number to move back from. e.g. '3754624'
 STOP_AT_POST_NUMBER = None  # '12452501'  # Optional
 SAVE_MONTHLY_PAGES = False
@@ -23,6 +29,11 @@ BASE_URL = 'http://israblog.nana10.co.il/blogread.asp'
 BASE_URL_TBLOG = 'http://israblog.nana10.co.il/tblogread.asp'
 POST_URL = 'http://israblog.nana10.co.il/blogread.asp?blog=%s&blogcode=%s'
 COMMENTS_URL = 'http://israblog.nana10.co.il/comments.asp?blog=%s&user=%s'
+
+USER_BACKUP_FOLDERS = [
+    '/users/eliram/Documents/israblog3',
+    "/home/avihay/tmp/backup"
+]
 
 # RegEx
 RE_POST_URL_PATTERN = '\?blog=%s&a?m?p?;?blogcode=\d+'
@@ -127,6 +138,30 @@ class BlogCrawl(object):
 
         return int(next_page)
 
+    @staticmethod
+    def read_url(url):
+        # Try 3 times to read URL, in case of failure, print error and exit
+        """
+
+        :param str url:
+        :return:
+        :rtype: str
+        """
+        attempts = 3
+        while attempts > 0:
+            try:
+                data = urllib2.urlopen(url).read()
+                return data
+            except urllib2.HTTPError:
+                attempts -= 1
+                logging.error('Got HTTP Error trying to read page, %d retries left.' % attempts)
+            except Exception:
+                attempts -= 1
+                logging.error('Error trying to read page, %d retries left.' % attempts)
+            sleep(5)
+
+        raise
+
     def parse_date(self, post_html):
         try:
             date_str = re.search(RE_TIMESTAMP, post_html).group(1)
@@ -199,7 +234,7 @@ class BlogCrawl(object):
         :return:
         :rtype: str
         """
-        post_html = urllib2.urlopen(post_url).read()  # type: str
+        post_html = self.read_url(post_url)  # type: str
         self.current_post = BlogPost(post_number)
         self.posts[post_number] = self.current_post
         self.posts_list.insert(0, self.current_post)
@@ -270,7 +305,7 @@ class BlogCrawl(object):
 
         while comments_url is not None:
             logging.debug(comments_url)
-            comments_html = urllib2.urlopen(comments_url).read()
+            comments_html = self.read_url(comments_url)
             self.comment_pages += 1
             self.current_post.comment_pages = comments_page_number
             try:
@@ -376,7 +411,7 @@ class BlogCrawl(object):
         """
         initial_page = None
         if START_FROM_POST_NUMBER is None:
-            initial_page = urllib2.urlopen(self.blog_url).read()
+            initial_page = self.read_url(self.blog_url)
             next_post_url = None
             next_post_number = None
             try:
@@ -398,7 +433,7 @@ class BlogCrawl(object):
                     self.parse_blog_info(initial_page)
                     return 'blog_empty'
             if self.is_tblog:
-                initial_page = urllib2.urlopen(self.blog_url).read()
+                initial_page = self.read_url(self.blog_url)
                 try:
                     next_post_url = re.search(self.re_post_url_pattern, initial_page).group(0).replace('&amp;', '&')
                     next_post_number = next_post_url.split('blogcode=')[1]
@@ -452,7 +487,8 @@ class BlogCrawl(object):
         # Read the monthly pages, and download missing posts
         for month_data in self.months:
             self.crawl_month(month_data)
-        return 'blog'
+
+        return 'tblog' if self.is_tblog else 'blog'
 
     def read_months(self, page_html):
         try:
@@ -492,7 +528,7 @@ class BlogCrawl(object):
         month_page_url = self.blog_url + month_data['url']
         page_number = 1
         while page_number > 0:
-            page_html = urllib2.urlopen(month_page_url).read()
+            page_html = self.read_url(month_page_url)
             logging.debug('%s%s page %d', month_data['year'], month_data['month'], page_number)
             if SAVE_MONTHLY_PAGES:
                 page_filename = os.path.join(self.blog_folder, 'blog_%s_%s%s_%s.html' % (
@@ -523,14 +559,14 @@ class BlogCrawl(object):
             return ''
 
     def parse_blog_info(self, initial_page):
-        self.nickname = self.search_re('<b>כינוי:</b> (.*)<br>', initial_page)
+        self.nickname = self.search_re('<b>כינוי:</b>(.*)<br>', initial_page)
         if self.nickname == '':
             self.nickname = self.search_re('<script>displayEmail\(\'list\',\'.*\',\'.*\',"(.*)"\)</script>',
                                            initial_page)
         if self.nickname == '':
             self.nickname = self.search_re('displayEmail\(\'blog\',\'.*\',\'.*\',"(.*)"\)', initial_page)
 
-        self.age = self.search_re('<br></br><b>בן:</b> (.*)<br></br>', initial_page)
+        self.age = self.search_re('<br></br><b>בן:</b>(.*)<br></br>', initial_page)
 
         email_domain = self.search_re("<script>displayEmail\('list','.*','(.*)',\".*\"\)</script>", initial_page)
         if email_domain == '':
@@ -551,8 +587,8 @@ if __name__ == '__main__':
     logging.info('Israblog Batch Backup Script. Version 8')
     logging.info('This script backs up posts, template and comments. [running on %s]' % platform)
 
-    blog_number_start = input("Blog Number to Start: ")  # Blog number. e.g. 11990
-    blog_number_end = input("Stop at blog number: ")
+    blog_number_start = long(sys.argv[1]) if len(sys.argv) > 2 else input("Blog Number to Start: ")  # Blog number. e.g. 11990
+    blog_number_end = long(sys.argv[2]) if len(sys.argv) > 2 else input("Stop at blog number: ")
 
     backup_images = blog_number_start == blog_number_end
     if backup_images:
@@ -560,20 +596,24 @@ if __name__ == '__main__':
     else:
         logging.info('Downloading multiple blogs - Images are NOT saved. To backup images, download a single blog.')
 
-    default_backup_folder = '/users/eliram/Documents/israblog3'
+    backup_folder = None
 
-    if not os.path.exists(default_backup_folder):
+    for try_backup_folder in USER_BACKUP_FOLDERS:
+        if os.path.exists(try_backup_folder):
+            backup_folder = try_backup_folder
+
+    if backup_folder is None:
         default_backup_folder = os.path.dirname(os.path.realpath(__file__))
-    print ''
-
-    backup_folder = raw_input('Specify Backup folder, or press ENTER to use [ %s ]: ' % default_backup_folder)
-
-    if backup_folder:
-        if not os.path.exists(backup_folder):
-            logging.error('Folder does not exist: %s' % backup_folder)
-            exit(1)
+        backup_folder = raw_input('Specify Backup folder, or press ENTER to use [ %s ]: ' % default_backup_folder)
+        if backup_folder:
+            if not os.path.exists(backup_folder):
+                logging.error('Folder does not exist: %s' % backup_folder)
+                exit(1)
+        else:
+            backup_folder = default_backup_folder
     else:
-        backup_folder = default_backup_folder
+        logging.info('Saving to folder: %s' % backup_folder)
+    print ''
 
     if not os.path.exists(os.path.join(backup_folder, 'log')):
         os.makedirs(os.path.join(backup_folder, 'log'))
@@ -630,4 +670,4 @@ if __name__ == '__main__':
     logging.info('Finished. Found %d blogs in range %d-%d. Ratio %d percent' % (
         blog_enum, blog_number_start, blog_number_end, ratio))
     logging.info('Results: %s', results)
-    wait = raw_input('Press ENTER')
+    # wait = raw_input('Press ENTER')
