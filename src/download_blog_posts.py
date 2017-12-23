@@ -21,6 +21,8 @@ try:
 except ImportError:
     pass
 
+VERSION = '10.2'
+
 START_FROM_POST_NUMBER = None  # '3820213'  # Optional. Use None or a string containing the post number to move back from. e.g. '3754624'
 STOP_AT_POST_NUMBER = None  # '12452501'  # Optional
 SAVE_MONTHLY_PAGES = False
@@ -618,7 +620,7 @@ class BlogCrawl(object):
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
 
-    logging.info('Israblog Batch Backup Script. Version 10')
+    logging.info('Israblog Batch Backup Script. Version %s' % VERSION)
     logging.info('This script backs up posts, template and comments. [running on %s]' % platform)
 
     blog_number_start = long(sys.argv[1]) if len(sys.argv) > 2 else input(
