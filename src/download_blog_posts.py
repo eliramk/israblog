@@ -32,7 +32,7 @@ POST_URL = 'http://israblog.nana10.co.il/blogread.asp?blog=%s&blogcode=%s'
 COMMENTS_URL = 'http://israblog.nana10.co.il/comments.asp?blog=%s&user=%s'
 
 USER_BACKUP_FOLDERS = [
-    '/users/eliram/Documents/israblog2',
+    '/users/eliram/Documents/israblog3',
     "/home/avihay/tmp/backup"
 ]
 
@@ -702,6 +702,11 @@ if __name__ == '__main__':
                         str(int(post.timestamp)) if post.timestamp else '',
                         post.post_title)
                     log_file.write(line)
+
+        if blog_number % 100 == 0:
+            logging.info('Completed %d percent. Stats: %s',
+                         (blog_number - blog_number_start + 1) * 100 / (blog_number_end - blog_number_start + 1),
+                         results)
 
     ratio = blog_enum * 100 / (blog_number_end - blog_number_start + 1)
     logging.info('Finished. Found %d blogs in range %d-%d. Ratio %d percent' % (
