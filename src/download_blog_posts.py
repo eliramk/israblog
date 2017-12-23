@@ -14,6 +14,7 @@ import os
 from time import sleep
 import datetime
 import sys
+from HTMLParser import HTMLParser
 
 try:
     from awscli.compat import raw_input
@@ -31,7 +32,7 @@ POST_URL = 'http://israblog.nana10.co.il/blogread.asp?blog=%s&blogcode=%s'
 COMMENTS_URL = 'http://israblog.nana10.co.il/comments.asp?blog=%s&user=%s'
 
 USER_BACKUP_FOLDERS = [
-    '/users/eliram/Documents/israblog3',
+    '/users/eliram/Documents/israblog2',
     "/home/avihay/tmp/backup"
 ]
 
@@ -40,7 +41,7 @@ RE_POST_URL_PATTERN = '\?blog=%s&a?m?p?;?blogcode=\d+'
 RE_INITIAL_BLOG_CODE = 'blogcode=(\d+)'
 RE_PREVIOUS_POST = '<a title="לקטע הקודם" href="/blogread.asp\?blog=%s&amp;blogcode=(\d+)" class="blog">'
 RE_COMMENTS_NEXT_PAGE = 'href="comments\.asp\?.*&posnew=(\d+)">לדף הבא</a>'
-RE_TIMESTAMP = '(\d\d?/\d\d?/\d\d\d\d(\xc2\xa0|/s|&nbsp;|\xa0)\d\d?:\d\d)\r?\n'
+RE_TIMESTAMP = '(\d\d?/\d\d?/\d\d\d\d(\xc2\xa0|\s|&nbsp;|\xa0)\d\d?:\d\d)\r?\n'
 RE_DROPDOWN = '<select name="PeriodsForUser".*>(<option.*/option>)</select>'
 RE_DROPDOWN_T = '<select .*?name=\'selMonth\'.*\r?\n(<option.*/option>\r?\n)*</select>'
 RE_IMAGE_URL = 'https?:\/\/(?:[a-z\-]+\.)+[a-z]{2,6}(?:\/[^\/#?]+)+\.(?:jpe?g|gif|png|css)'
@@ -48,12 +49,18 @@ RE_IMAGE_URL = 'https?:\/\/(?:[a-z\-]+\.)+[a-z]{2,6}(?:\/[^\/#?]+)+\.(?:jpe?g|gi
 # RE_DROPDOWN_T_END = </select>
 RE_POST_ONLY = '(<table width="100%"><tr><td class="blog">.*)<iframe id='
 RE_COMMENTS_ONLY = "(<style>a:active.*)<a name='newcommentlocation'></a>"
+
 POST_ONLY_START = '<table width="100%"><tr><td class="blog">'
 POST_ONLY_END = '<iframe id='
 COMMENTS_ONLY_START = '<style>a:active'
 COMMENTS_ONLY_END = "<a name='newcommentlocation'></a>"
 
 platform = sys.platform
+nbsp = HTMLParser().unescape('&nbsp;')
+# RE_NICKNAME = u'<b>כינוי:</b>(?:\xc2\xa0|\s|&nbsp;|\xa0|..?)\n?(.*?)<br>'
+# RE_AGE = u'<br></br><b>ב[ןת]:</b>(?:\xc2\xa0|\s|&nbsp;|\xa0|..?)(\d*)<br></br>'
+RE_NICKNAME = u'<b>.{5}:</b>(?:\s|&nbsp;|.?)(.*?)<br>'
+RE_AGE = u'<br></br><b>..:</b>(?:\s|&nbsp;|.?)(\d*)<br></br>'
 
 COMMON_TEMPLATE_IMAGES = [
     'http://f.nanafiles.co.il/Partner48/Service87/Images/Header/headerBGGrad11.png',
@@ -152,15 +159,16 @@ class BlogCrawl(object):
             try:
                 data = urllib2.urlopen(url).read()
                 return data
-            except urllib2.HTTPError:
+            except urllib2.HTTPError as ex:
                 attempts -= 1
-                logging.error('Got HTTP Error trying to read page, %d retries left.' % attempts)
-            except Exception:
+                logging.error('HTTP Error, %d retries left, trying to read url %s' % (attempts, url))
+            except Exception as ex:
                 attempts -= 1
-                logging.error('Error trying to read page, %d retries left.' % attempts)
+                logging.error('Error, %d retries left, trying to read url %s' % (attempts, url))
             sleep(5)
 
-        raise
+        results['errors_blogs'].append(url)
+        return 'error'
 
     def parse_date(self, post_html):
         try:
@@ -376,7 +384,7 @@ class BlogCrawl(object):
 
         self.current_post.comments_saved = True
         if platform != 'darwin' and not re.search('[A-Za-z]', post_title):  # Don't reverse english titles
-            post_title = u''.join(reversed(post_title.decode('UTF-8')))  # [::-1]
+            post_title = u''.join(reversed(post_title.decode('UTF-8', errors='ignore')))  # [::-1]
             post_title = post_title.encode('UTF-8')
         logging.info('Blog %s Post #%d [%s] %s [%d comments] %s', self.blog_number, len(self.posts), post_number,
                      date_obj.strftime('%Y-%m-%d %H:%M') if date_obj else '', self.current_post.comments, post_title)
@@ -429,17 +437,18 @@ class BlogCrawl(object):
                     if 'window.location.replace(\'/noblog.htm\');' in initial_page:
                         logging.info('No blog #%s', str(self.blog_number))
                         return 'no_blog'
-                    logging.warning('Could not find blog %s', self.blog_url)
                     self.parse_blog_info(initial_page)
+                    logging.warning('Empty blog %s', self.blog_url)
                     return 'blog_empty'
             if self.is_tblog:
+                logging.info('Blog %s Using tblogread', blog_number)
                 initial_page = self.read_url(self.blog_url)
                 try:
                     next_post_url = re.search(self.re_post_url_pattern, initial_page).group(0).replace('&amp;', '&')
                     next_post_number = next_post_url.split('blogcode=')[1]
                 except Exception as ex:
-                    logging.warning('Could not find blog %s', self.blog_url)
                     self.parse_blog_info(initial_page)
+                    logging.warning('Empty t-blog %s  %s by %s', self.blog_url, self.title, self.nickname)
                     return 'tblog_empty'
 
             logging.debug(next_post_url)
@@ -458,13 +467,18 @@ class BlogCrawl(object):
             self.read_months(initial_page)
 
         self.parse_blog_info(initial_page)
-        if platform == 'darwin' or re.search('[A-Za-z]', self.title):
-            nick = self.nickname.decode('windows-1255').encode('UTF-8')
-            title = self.title.decode('windows-1255').encode('UTF-8')
-        else:
-            # reverse strings
-            nick = self.nickname.decode('windows-1255')[::-1].encode('UTF-8')
-            title = self.title.decode('windows-1255')[::-1].encode('UTF-8')
+        try:
+            if platform == 'darwin' or re.search('[A-Za-z]', self.title):
+                nick = self.nickname.decode('windows-1255', errors='ignore').encode('UTF-8')
+                title = self.title.decode('windows-1255', errors='ignore').encode('UTF-8')
+            else:
+                # reverse strings
+                nick = self.nickname.decode('windows-1255', errors='ignore')[::-1].encode('UTF-8')
+                title = self.title.decode('windows-1255', errors='ignore')[::-1].encode('UTF-8')
+        except (UnicodeDecodeError, Exception) as ex:
+            logging.error('Bad Unicode decode')
+            nick = self.nickname
+            title = self.title
 
         logging.info('Found blog %s by %s - %s', self.blog_number, nick, title)
 
@@ -551,22 +565,27 @@ class BlogCrawl(object):
                 page_number = 0
 
     @staticmethod
-    def search_re(regex, text):
+    def search_re(regex, text, multiline=False):
         try:
-            result = re.search(regex, text).group(1)  # type: str
+            if multiline:
+                result = re.search(regex, text, flags=re.MULTILINE).group(1)  # type: str
+            else:
+                result = re.search(regex, text).group(1)  # type: str
             return result.strip()
         except Exception as ex:
             return ''
 
     def parse_blog_info(self, initial_page):
-        self.nickname = self.search_re('<b>כינוי:</b>(.*)<br>', initial_page)
+        self.nickname = self.search_re(RE_NICKNAME, initial_page)
         if self.nickname == '':
             self.nickname = self.search_re('<script>displayEmail\(\'list\',\'.*\',\'.*\',"(.*)"\)</script>',
                                            initial_page)
+        else:
+            pass
         if self.nickname == '':
             self.nickname = self.search_re('displayEmail\(\'blog\',\'.*\',\'.*\',"(.*)"\)', initial_page)
 
-        self.age = self.search_re('<br></br><b>בן:</b>(.*)<br></br>', initial_page)
+        self.age = self.search_re(RE_AGE, initial_page)
 
         email_domain = self.search_re("<script>displayEmail\('list','.*','(.*)',\".*\"\)</script>", initial_page)
         if email_domain == '':
@@ -584,10 +603,11 @@ class BlogCrawl(object):
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
 
-    logging.info('Israblog Batch Backup Script. Version 8')
+    logging.info('Israblog Batch Backup Script. Version 9')
     logging.info('This script backs up posts, template and comments. [running on %s]' % platform)
 
-    blog_number_start = long(sys.argv[1]) if len(sys.argv) > 2 else input("Blog Number to Start: ")  # Blog number. e.g. 11990
+    blog_number_start = long(sys.argv[1]) if len(sys.argv) > 2 else input(
+        "Blog Number to Start: ")  # Blog number. e.g. 11990
     blog_number_end = long(sys.argv[2]) if len(sys.argv) > 2 else input("Stop at blog number: ")
 
     backup_images = blog_number_start == blog_number_end
@@ -631,13 +651,14 @@ if __name__ == '__main__':
             '"Blog Number","Post Number","Comments","Post Timestamp","Post Epoch","Post Title"\n')
 
     blog_enum = 0
-    results = {}
+    results = {
+        'errors_blogs': []
+    }
     for blog_number in range(blog_number_start, blog_number_end + 1):
         blog_crawl = BlogCrawl(blog_number, backup_folder, backup_images=backup_images)
         result = blog_crawl.process_blog()
         results[result] = results.get(result, 0) + 1
         if len(blog_crawl.posts) > 0 or result != 'no_blog':
-            blog_enum += 1
             with open(log_filename, mode='a') as log_file:
                 line = '%d,%d,%d,%s,"%s","%s",%s,"%s","%s",%d\r\n' % (
                     blog_number,
@@ -651,9 +672,10 @@ if __name__ == '__main__':
                     blog_crawl.description,
                     blog_crawl.total_comments
                 )
-                log_file.write(line.decode('windows-1255').encode('UTF-8'))
+                log_file.write(line.decode('windows-1255', errors='ignore').encode('UTF-8'))
 
         if len(blog_crawl.posts) > 0:
+            blog_enum += 1
             with open(log_posts_filename, mode='a') as log_file:
                 for post in blog_crawl.posts_list:  # type: BlogPost
                     line = '%d,%d,%d,"%s",%s,"%s"\r\n' % (
@@ -670,4 +692,4 @@ if __name__ == '__main__':
     logging.info('Finished. Found %d blogs in range %d-%d. Ratio %d percent' % (
         blog_enum, blog_number_start, blog_number_end, ratio))
     logging.info('Results: %s', results)
-    # wait = raw_input('Press ENTER')
+    wait = raw_input('Press ENTER')
