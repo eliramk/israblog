@@ -176,14 +176,27 @@ class BlogCrawl(object):
         except AttributeError as ex:
             return None
 
-        date_array = date_str.split('\xc2\xa0')[0].split('/')
-        time_array = date_str.split('\xc2\xa0')[1].split(':')
-        date_obj = datetime.datetime(int(date_array[2]),
-                                     int(date_array[1]),
-                                     int(date_array[0]),
-                                     int(time_array[0]),
-                                     int(time_array[1]),
-                                     0)
+        if '&nbsp;' in date_str:
+            date_split = date_str.split('&nbsp;')
+        else:
+            date_split = date_str.split('\xc2\xa0')
+        date_array = date_split[0].split('/')
+
+        if len(date_split) > 1:
+            time_array = date_split[1].split(':')
+        else:
+            time_array = [0, 0]
+
+        try:
+            date_obj = datetime.datetime(int(date_array[2]),
+                                         int(date_array[1]),
+                                         int(date_array[0]),
+                                         int(time_array[0]),
+                                         int(time_array[1]),
+                                         0)
+        except Exception:
+            date_obj = datetime.datetime(1970, 1, 1, 0, 0, 0)
+
         # new_post.date_str = date_str
         if int(date_array[2]) < 1970:
             # Fake date
@@ -603,7 +616,7 @@ class BlogCrawl(object):
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
 
-    logging.info('Israblog Batch Backup Script. Version 9')
+    logging.info('Israblog Batch Backup Script. Version 10')
     logging.info('This script backs up posts, template and comments. [running on %s]' % platform)
 
     blog_number_start = long(sys.argv[1]) if len(sys.argv) > 2 else input(
