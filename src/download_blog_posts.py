@@ -178,6 +178,8 @@ class BlogCrawl(object):
 
         if '&nbsp;' in date_str:
             date_split = date_str.split('&nbsp;')
+        elif ' ' in date_str:
+            date_split = date_str.split(' ')
         else:
             date_split = date_str.split('\xc2\xa0')
         date_array = date_split[0].split('/')
