@@ -11,7 +11,7 @@ import urllib2
 import logging
 import re
 import os
-from time import sleep
+from time import time, sleep
 import datetime
 import sys
 from HTMLParser import HTMLParser
@@ -667,6 +667,8 @@ if __name__ == '__main__':
 
     blog_enum = 0
     results = {}
+    start_time = time()
+    blogs_total = (blog_number_end - blog_number_start + 1)
     for blog_number in range(blog_number_start, blog_number_end + 1):
         blog_crawl = BlogCrawl(blog_number, backup_folder, backup_images=backup_images)
         result = blog_crawl.process_blog()
@@ -702,14 +704,23 @@ if __name__ == '__main__':
                     log_file.write(line)
 
         if blog_number % 100 == 0:
-            logging.info('Completed %d/%d blogs (%d%%). Stats: %s' % (
-                         (blog_number - blog_number_start + 1),
-                         (blog_number_end - blog_number_start + 1),
-                         (blog_number - blog_number_start + 1) * 100 / (blog_number_end - blog_number_start + 1),
+            elapsed_time = time() - start_time
+            blogs_completed = (blog_number - blog_number_start + 1)
+            blogs_left = blogs_total - blogs_completed
+            time_passed = datetime.datetime.utcfromtimestamp(elapsed_time).strftime('%H:%M:%S')
+            time_left = datetime.datetime.utcfromtimestamp(blogs_left * elapsed_time / blogs_completed).strftime('%H:%M:%S')
+            logging.info('Completed %d/%d blogs (%d%%). Time passed: %s Time Left: %s Stats: %s' % (
+                         blogs_completed,
+                         blogs_total,
+                         blogs_completed * 100 / blogs_total,
+                         time_passed,
+                         time_left,
                          results))
 
     ratio = blog_enum * 100 / (blog_number_end - blog_number_start + 1)
-    logging.info('Finished. Found %d blogs in range %d-%d. Ratio %d percent' % (
-        blog_enum, blog_number_start, blog_number_end, ratio))
+    elapsed_time = time() - start_time
+    time_passed = datetime.datetime.utcfromtimestamp(elapsed_time).strftime('%H:%M:%S')
+    logging.info('Finished. Found %d blogs in range %d-%d. Ratio %d%%. Time to complete: %s' % (
+        blog_enum, blog_number_start, blog_number_end, ratio, time_passed))
     logging.info('Results: %s', results)
     wait = raw_input('Press ENTER')
