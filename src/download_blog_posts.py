@@ -32,7 +32,7 @@ POST_URL = 'http://israblog.nana10.co.il/blogread.asp?blog=%s&blogcode=%s'
 COMMENTS_URL = 'http://israblog.nana10.co.il/comments.asp?blog=%s&user=%s'
 
 USER_BACKUP_FOLDERS = [
-    '/users/eliram/Documents/israblog3',
+    '/users/eliram/Documents/israblog2',
     "/home/avihay/tmp/backup"
 ]
 
@@ -167,7 +167,7 @@ class BlogCrawl(object):
                 logging.error('Error, %d retries left, trying to read url %s' % (attempts, url))
             sleep(5)
 
-        results['errors_blogs'].append(url)
+        results['errors_blogs'] = results.get('errors_blogs', []).append(url)
         return 'error'
 
     def parse_date(self, post_html):
@@ -666,9 +666,7 @@ if __name__ == '__main__':
             '"Blog Number","Post Number","Comments","Post Timestamp","Post Epoch","Post Title"\n')
 
     blog_enum = 0
-    results = {
-        'errors_blogs': []
-    }
+    results = {}
     for blog_number in range(blog_number_start, blog_number_end + 1):
         blog_crawl = BlogCrawl(blog_number, backup_folder, backup_images=backup_images)
         result = blog_crawl.process_blog()
@@ -704,9 +702,11 @@ if __name__ == '__main__':
                     log_file.write(line)
 
         if blog_number % 100 == 0:
-            logging.info('Completed %d percent. Stats: %s',
+            logging.info('Completed %d/%d blogs (%d%%). Stats: %s' % (
+                         (blog_number - blog_number_start + 1),
+                         (blog_number_end - blog_number_start + 1),
                          (blog_number - blog_number_start + 1) * 100 / (blog_number_end - blog_number_start + 1),
-                         results)
+                         results))
 
     ratio = blog_enum * 100 / (blog_number_end - blog_number_start + 1)
     logging.info('Finished. Found %d blogs in range %d-%d. Ratio %d percent' % (
