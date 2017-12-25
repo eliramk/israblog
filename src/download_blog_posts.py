@@ -21,17 +21,23 @@ try:
 except ImportError:
     pass
 
-VERSION = '10.2'
+VERSION = '11.0'
 
 START_FROM_POST_NUMBER = None  # '3820213'  # Optional. Use None or a string containing the post number to move back from. e.g. '3754624'
 STOP_AT_POST_NUMBER = None  # '12452501'  # Optional
 SAVE_MONTHLY_PAGES = False
+OVERWRITE_EXISTING_POSTS = False  # If a file already exists for a certain post, assume it's already downloaded with its comments
+SCROLL_BY_POST = False  # Move from one post to the previous one until the chain breaks
 
 BLOG_URL = 'http://israblog.nana10.co.il/blogread.asp?blog=%s'
 BASE_URL = 'http://israblog.nana10.co.il/blogread.asp'
 BASE_URL_TBLOG = 'http://israblog.nana10.co.il/tblogread.asp'
 POST_URL = 'http://israblog.nana10.co.il/blogread.asp?blog=%s&blogcode=%s'
 COMMENTS_URL = 'http://israblog.nana10.co.il/comments.asp?blog=%s&user=%s'
+
+EXCLUDE_BLOGS = [
+    865861
+]
 
 USER_BACKUP_FOLDERS = [
     '/users/eliram/Documents/israblog2',
@@ -90,6 +96,7 @@ class BlogPost(object):
         self.comments = 0
         self.timestamp = None  # type: float
         self.post_title = ''
+        self.source = None  # type: str  # file/url
 
 
 class BlogCrawl(object):
@@ -118,6 +125,8 @@ class BlogCrawl(object):
         self.title = ''
         self.description = ''
         self.total_comments = 0
+        self.posts_downloaded = 0
+        self.posts_read = 0
         self.save_template = True  # Save the first post with full html as well?
         self.save_comments_template = True  # Save the first (recent) comments page without modifications
         self.is_tblog = False
@@ -207,10 +216,16 @@ class BlogCrawl(object):
             ts = 0
         else:
             ts = (date_obj - datetime.datetime(1970, 1, 1)).total_seconds()
-        self.current_post.timestamp = ts
-        return date_obj
+        return date_obj, ts
 
     def download_page_images(self, post_html, post_number='template'):
+        """
+
+        :param str post_html:
+        :param str post_number:
+        :return: Modified html
+        :rtype: str
+        """
         relative_folder = 'template' if post_number == 'template' else 'pics'
         images_folder = os.path.join(self.blog_folder, relative_folder)
         image_links = re.findall(RE_IMAGE_URL, post_html, flags=re.IGNORECASE)
@@ -251,6 +266,42 @@ class BlogCrawl(object):
 
         return modified_html
 
+    def parse_post_data(self, post_filename, post_number):
+        """
+
+        :param str post_filename: If not None, read post from this file instead of the URL
+        :param str post_number:
+        """
+        try:
+            with open(post_filename) as post_file:
+                post_html = post_file.read()  # type: str
+        except Exception as ex:
+            logging.error("Problem reading file %s", post_filename)
+            return 'error'
+        self.current_post = BlogPost(post_number)
+        self.posts[post_number] = self.current_post
+        self.posts_list.insert(0, self.current_post)
+        self.current_post.source = 'file'
+
+        date_obj, ts = self.parse_date(post_html)
+        self.current_post.timestamp = ts
+
+        post_title = self.search_re('<h2 class="title">(.*?)</h2>', post_html) or self.search_re(
+            '<meta property="og:title" content="(.*?)"/>', post_html)
+        self.current_post.post_title = post_title
+        comments_re = 'comments%scount">(\d+)<' % post_number
+        comments_count = self.search_re(comments_re, post_html)
+        if comments_count == '':
+            self.current_post.comments_saved = False
+            # logging.warning('Could not detect comments')
+        else:
+            self.current_post.comments = int(comments_count)
+            self.current_post.comments_saved = True
+            self.total_comments += int(comments_count)
+        logging.info('Blog %s Post #%d [%s] %s [%d comments] %s', self.blog_number, len(self.posts),
+                     post_number,
+                     date_obj.strftime('%Y-%m-%d %H:%M') if date_obj else '', self.current_post.comments, post_title)
+
     def process_post(self, post_url, post_number):
         """
 
@@ -263,6 +314,7 @@ class BlogCrawl(object):
         self.current_post = BlogPost(post_number)
         self.posts[post_number] = self.current_post
         self.posts_list.insert(0, self.current_post)
+        self.current_post.source = 'url'
 
         # We're also converting to unicode, because it's the right thing to do
         try:
@@ -276,7 +328,9 @@ class BlogCrawl(object):
         except Exception as ex:
             logging.error('Could not encode post_html to UTF-8')
 
-        date_obj = self.parse_date(post_html)
+        date_obj, ts = self.parse_date(post_html)
+        self.current_post.timestamp = ts
+
         post_title = self.search_re('<h2 class="title">(.*?)</h2>', post_html) or self.search_re(
             '<meta property="og:title" content="(.*?)"/>', post_html)
         self.current_post.post_title = post_title
@@ -403,7 +457,7 @@ class BlogCrawl(object):
         if platform != 'darwin' and not re.search('[A-Za-z]', post_title):  # Don't reverse english titles
             post_title = u''.join(reversed(post_title.decode('UTF-8', errors='ignore')))  # [::-1]
             post_title = post_title.encode('UTF-8')
-        logging.info('Blog %s Post #%d [%s] %s [%d comments] %s', self.blog_number, len(self.posts), post_number,
+        logging.info('Blog %s Post #%d (DOWNLOADING) [%s] %s [%d comments] %s', self.blog_number, len(self.posts), post_number,
                      date_obj.strftime('%Y-%m-%d %H:%M') if date_obj else '', self.current_post.comments, post_title)
 
         return next_post_number
@@ -474,6 +528,12 @@ class BlogCrawl(object):
             next_post_url = self.get_post_url(START_FROM_POST_NUMBER)
             next_post_number = STOP_AT_POST_NUMBER
 
+        if self.blog_number in EXCLUDE_BLOGS:
+            if initial_page is not None:
+                self.parse_blog_info(initial_page)
+            self.title += ' [EXCLUDED]'
+            return 'excluded'
+
         if not os.path.exists(self.blog_folder):
             os.makedirs(self.blog_folder)
 
@@ -500,20 +560,21 @@ class BlogCrawl(object):
         logging.info('Found blog %s by %s - %s', self.blog_number, nick, title)
 
         # Scroll back from the latest post to the previous one, until you hit a broken link
-        while next_post_number is not None:
-            logging.debug('Post #%d [%s] %s', len(self.posts), next_post_number, next_post_url)
-            next_post_number = self.process_post(next_post_url, next_post_number)
+        if SCROLL_BY_POST:
+            while next_post_number is not None:
+                logging.debug('Post #%d [%s] %s', len(self.posts), next_post_number, next_post_url)
+                next_post_number = self.process_post(next_post_url, next_post_number)
 
-            if STOP_AT_POST_NUMBER and next_post_number and next_post_number == STOP_AT_POST_NUMBER:
-                logging.warning('Reached post marked as stop point %s', STOP_AT_POST_NUMBER)
-                next_post_number = None
+                if STOP_AT_POST_NUMBER and next_post_number and next_post_number == STOP_AT_POST_NUMBER:
+                    logging.warning('Reached post marked as stop point %s', STOP_AT_POST_NUMBER)
+                    next_post_number = None
 
-            if next_post_number is None:
-                logging.warning('Could not find another post')
-            else:
-                next_post_url = self.get_post_url(next_post_number)
-            # Don't strain the server too much.
-            sleep(0.1)
+                if next_post_number is None:
+                    logging.warning('Could not find another post')
+                else:
+                    next_post_url = self.get_post_url(next_post_number)
+                # Don't strain the server too much.
+                sleep(0.1)
 
         # Read the monthly pages, and download missing posts
         for month_data in self.months:
@@ -556,11 +617,13 @@ class BlogCrawl(object):
                 )
 
     def crawl_month(self, month_data):
-        month_page_url = self.blog_url + month_data['url']
+        month_url = self.blog_url + month_data['url']
         page_number = 1
+        logging.debug('Crawling Month %s', month_url)
         while page_number > 0:
+            month_page_url = month_url + '&pagenum=%s' % page_number
             page_html = self.read_url(month_page_url)
-            logging.debug('%s%s page %d', month_data['year'], month_data['month'], page_number)
+            logging.debug('%s-%s page %d %s', month_data['year'], month_data['month'], page_number, month_page_url)
             if SAVE_MONTHLY_PAGES:
                 page_filename = os.path.join(self.blog_folder, 'blog_%s_%s%s_%s.html' % (
                     self.blog_number, month_data['year'], month_data['month'], str(page_number)))
@@ -570,8 +633,16 @@ class BlogCrawl(object):
             for post_str in posts:
                 post_number = post_str.split('blogcode=')[1]
                 if self.posts.get(str(post_number), None) is None:
-                    logging.debug('Found Missing Post #%s', post_number)
-                    self.process_post(post_url=self.get_post_url(post_number), post_number=str(post_number))
+                    post_filename = os.path.join(self.blog_folder, 'post_%s.html' % str(post_number))
+                    if OVERWRITE_EXISTING_POSTS or not os.path.exists(post_filename):
+                        logging.debug('Downloading Post #%s', post_number)
+                        self.posts_downloaded += 1
+                        self.process_post(post_url=self.get_post_url(post_number), post_number=str(post_number))
+                    else:
+                        # Post already exists, reads its data
+                        logging.debug('Reading local Post #%s', post_number)
+                        self.posts_read += 1
+                        self.parse_post_data(post_filename=post_filename, post_number=str(post_number))
                 else:
                     logging.debug('Already got Post #%s, skipping', post_number)
 
@@ -662,7 +733,7 @@ if __name__ == '__main__':
 
     with open(log_filename, mode='a+') as log_file:
         log_file.write(
-            '"Blog Number","Posts","Comment Pages","Timestamp","Nickname","Email","age","Title","Description","Comments"\n')
+            '"Blog Number","Posts","Comment Pages","Timestamp","Nickname","Email","age","Title","Description","Comments","Local Posts","Downloaded Posts"\n')
     with open(log_posts_filename, mode='a+') as log_file:
         log_file.write(
             '"Blog Number","Post Number","Comments","Post Timestamp","Post Epoch","Post Title"\n')
@@ -671,13 +742,15 @@ if __name__ == '__main__':
     results = {}
     start_time = time()
     blogs_total = (blog_number_end - blog_number_start + 1)
+    posts_downloaded_total = 0
+    posts_read_total = 0
     for blog_number in range(blog_number_start, blog_number_end + 1):
         blog_crawl = BlogCrawl(blog_number, backup_folder, backup_images=backup_images)
         result = blog_crawl.process_blog()
         results[result] = results.get(result, 0) + 1
         if len(blog_crawl.posts) > 0 or result != 'no_blog':
             with open(log_filename, mode='a') as log_file:
-                line = '%d,%d,%d,%s,"%s","%s",%s,"%s","%s",%d\r\n' % (
+                line = '%d,%d,%d,%s,"%s","%s",%s,"%s","%s",%d,%d,%d\r\n' % (
                     blog_number,
                     len(blog_crawl.posts),
                     blog_crawl.comment_pages,
@@ -687,37 +760,48 @@ if __name__ == '__main__':
                     blog_crawl.age,
                     blog_crawl.title,
                     blog_crawl.description,
-                    blog_crawl.total_comments
+                    blog_crawl.total_comments,
+                    blog_crawl.posts_read,
+                    blog_crawl.posts_downloaded
                 )
                 log_file.write(line.decode('windows-1255', errors='ignore').encode('UTF-8'))
+                logging.info('Blog: %d Posts: %d, Comments: %d, Local Posts: %d, Downloaded: %d\r\n' % (
+                    blog_number,
+                    len(blog_crawl.posts),
+                    blog_crawl.total_comments,
+                    blog_crawl.posts_read,
+                    blog_crawl.posts_downloaded))
 
         if len(blog_crawl.posts) > 0:
             blog_enum += 1
             with open(log_posts_filename, mode='a') as log_file:
                 for post in blog_crawl.posts_list:  # type: BlogPost
-                    line = '%d,%d,%d,"%s",%s,"%s"\r\n' % (
+                    line = '%d,%s,%s,"%s",%s,"%s"\r\n' % (
                         blog_number,
-                        int(post.post_nubmer),
-                        post.comments,
+                        str(post.post_nubmer),
+                        str(post.comments) if post.comments_saved else '',
                         datetime.datetime.fromtimestamp(post.timestamp).strftime(
                             '%Y-%m-%d %H:%M:%S') if post.timestamp else '',
                         str(int(post.timestamp)) if post.timestamp else '',
                         post.post_title)
                     log_file.write(line)
+            posts_downloaded_total += blog_crawl.posts_downloaded
+            posts_read_total += blog_crawl.posts_read
 
         if blog_number % 100 == 0:
             elapsed_time = time() - start_time
             blogs_completed = (blog_number - blog_number_start + 1)
             blogs_left = blogs_total - blogs_completed
             time_passed = datetime.datetime.utcfromtimestamp(elapsed_time).strftime('%H:%M:%S')
-            time_left = datetime.datetime.utcfromtimestamp(blogs_left * elapsed_time / blogs_completed).strftime('%H:%M:%S')
+            time_left = datetime.datetime.utcfromtimestamp(blogs_left * elapsed_time / blogs_completed).strftime(
+                '%H:%M:%S')
             logging.info('Completed %d/%d blogs (%d%%). Time passed: %s Time Left: %s Stats: %s' % (
-                         blogs_completed,
-                         blogs_total,
-                         blogs_completed * 100 / blogs_total,
-                         time_passed,
-                         time_left,
-                         results))
+                blogs_completed,
+                blogs_total,
+                blogs_completed * 100 / blogs_total,
+                time_passed,
+                time_left,
+                results))
 
     ratio = blog_enum * 100 / (blog_number_end - blog_number_start + 1)
     elapsed_time = time() - start_time
