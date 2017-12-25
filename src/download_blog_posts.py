@@ -295,7 +295,7 @@ class BlogCrawl(object):
         self.current_post.timestamp = ts
 
         post_title = self.search_re('<h2 class="title">(.*?)</h2>', post_html) or self.search_re(
-            '<span class="title">(.*?)</span>', post_html) or self.search_re(
+            '<span class="title">([^<]+?)</span>', post_html) or self.search_re(
             '<meta property=[\'"]og:title[\'"] content=[\'"](.*?)[\'"]/>', post_html)
         self.current_post.post_title = post_title
         comments_re = 'comments%scount">(\d+)<' % post_number
@@ -355,7 +355,7 @@ class BlogCrawl(object):
         self.current_post.timestamp = ts
 
         post_title = self.search_re('<h2 class="title">(.*?)</h2>', post_html) or self.search_re(
-            '<span class="title">(.*?)</span>', post_html) or self.search_re(
+            '<span class="title">([^<]+?)</span>', post_html) or self.search_re(
             '<meta property=[\'"]og:title[\'"] content=[\'"](.*?)[\'"]/>', post_html)
         self.current_post.post_title = post_title
         filename = os.path.join(self.blog_folder, 'post_%s.html' % post_number)
