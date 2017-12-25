@@ -21,7 +21,7 @@ try:
 except ImportError:
     pass
 
-VERSION = '12.0'
+VERSION = '12.2'
 
 START_FROM_POST_NUMBER = None  # '3820213'  # Optional. Use None or a string containing the post number to move back from. e.g. '3754624'
 STOP_AT_POST_NUMBER = None  # '12452501'  # Optional
