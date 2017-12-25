@@ -21,7 +21,7 @@ try:
 except ImportError:
     pass
 
-VERSION = '11.0'
+VERSION = '11.1'
 
 START_FROM_POST_NUMBER = None  # '3820213'  # Optional. Use None or a string containing the post number to move back from. e.g. '3754624'
 STOP_AT_POST_NUMBER = None  # '12452501'  # Optional
@@ -40,7 +40,7 @@ EXCLUDE_BLOGS = [
 ]
 
 USER_BACKUP_FOLDERS = [
-    '/users/eliram/Documents/israblog2',
+    '/users/eliram/Documents/israblog3',
     "/home/avihay/tmp/backup"
 ]
 
@@ -185,7 +185,7 @@ class BlogCrawl(object):
         try:
             date_str = re.search(RE_TIMESTAMP, post_html).group(1)
         except AttributeError as ex:
-            return None
+            return None, 0
 
         if '&nbsp;' in date_str:
             date_split = date_str.split('&nbsp;')
