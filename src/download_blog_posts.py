@@ -21,7 +21,7 @@ try:
 except ImportError:
     pass
 
-VERSION = '11.1'
+VERSION = '12.0'
 
 START_FROM_POST_NUMBER = None  # '3820213'  # Optional. Use None or a string containing the post number to move back from. e.g. '3754624'
 STOP_AT_POST_NUMBER = None  # '12452501'  # Optional
@@ -40,7 +40,7 @@ EXCLUDE_BLOGS = [
 ]
 
 USER_BACKUP_FOLDERS = [
-    '/users/eliram/Documents/israblog3',
+    '/users/eliram/Documents/israblog2',
     "/home/avihay/tmp/backup"
 ]
 
@@ -278,6 +278,14 @@ class BlogCrawl(object):
         except Exception as ex:
             logging.error("Problem reading file %s", post_filename)
             return 'error'
+
+        if "window.location.replace('/tblogread.asp'" in post_html:
+            # This is a redirect page, download the real one
+            self.is_tblog = True
+            self.base_url = BASE_URL_TBLOG
+            self.blog_url = self.blog_url.replace('tblogread', 'blogread')
+            self.blog_url = self.blog_url.replace('blogread', 'tblogread')
+            return self.process_post(self.get_post_url(post_number), post_number=post_number)
         self.current_post = BlogPost(post_number)
         self.posts[post_number] = self.current_post
         self.posts_list.insert(0, self.current_post)
@@ -287,7 +295,8 @@ class BlogCrawl(object):
         self.current_post.timestamp = ts
 
         post_title = self.search_re('<h2 class="title">(.*?)</h2>', post_html) or self.search_re(
-            '<meta property="og:title" content="(.*?)"/>', post_html)
+            '<span class="title">(.*?)</span>', post_html) or self.search_re(
+            '<meta property=[\'"]og:title[\'"] content=[\'"](.*?)[\'"]/>', post_html)
         self.current_post.post_title = post_title
         comments_re = 'comments%scount">(\d+)<' % post_number
         comments_count = self.search_re(comments_re, post_html)
@@ -311,6 +320,19 @@ class BlogCrawl(object):
         :rtype: str
         """
         post_html = self.read_url(post_url)  # type: str
+        if "window.location.replace('/tblogread.asp'" in post_html:
+            if self.is_tblog:
+                logging.error('Found tblog redirect on a tblog page!')
+            else:
+                # This is a redirect page, download the real one
+                self.is_tblog = True
+                self.base_url = BASE_URL_TBLOG
+                self.blog_url = self.blog_url.replace('tblogread', 'blogread')
+                self.blog_url = self.blog_url.replace('blogread', 'tblogread')
+                post_url = post_url.replace('tblogread', 'blogread')
+                post_url = post_url.replace('blogread', 'tblogread')
+                post_html = self.read_url(post_url)
+
         self.current_post = BlogPost(post_number)
         self.posts[post_number] = self.current_post
         self.posts_list.insert(0, self.current_post)
@@ -325,6 +347,7 @@ class BlogCrawl(object):
         try:
             post_html = post_html.encode('UTF-8', errors='ignore')
             post_html = post_html.replace('TEXT/HTML; CHARSET=WINDOWS-1255', 'TEXT/HTML; CHARSET=UTF-8')
+            post_html = post_html.replace('text/html; charset=windows-1255', 'TEXT/HTML; CHARSET=UTF-8')
         except Exception as ex:
             logging.error('Could not encode post_html to UTF-8')
 
@@ -332,7 +355,8 @@ class BlogCrawl(object):
         self.current_post.timestamp = ts
 
         post_title = self.search_re('<h2 class="title">(.*?)</h2>', post_html) or self.search_re(
-            '<meta property="og:title" content="(.*?)"/>', post_html)
+            '<span class="title">(.*?)</span>', post_html) or self.search_re(
+            '<meta property=[\'"]og:title[\'"] content=[\'"](.*?)[\'"]/>', post_html)
         self.current_post.post_title = post_title
         filename = os.path.join(self.blog_folder, 'post_%s.html' % post_number)
 
@@ -465,7 +489,7 @@ class BlogCrawl(object):
     def get_post_url(self, post_number):
         url = POST_URL % (self.blog_number, post_number)
         if self.is_tblog:
-            url = url.replace('blogread=', 'tblogread=')
+            url = url.replace('blogread.asp', 'tblogread.asp')
         return url
 
     def get_comments_url(self, post_number, page_number=1):
