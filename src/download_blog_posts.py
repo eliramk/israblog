@@ -21,7 +21,7 @@ try:
 except ImportError:
     pass
 
-VERSION = '12.2'
+VERSION = '12.3'
 
 START_FROM_POST_NUMBER = None  # '3820213'  # Optional. Use None or a string containing the post number to move back from. e.g. '3754624'
 STOP_AT_POST_NUMBER = None  # '12452501'  # Optional
@@ -542,10 +542,10 @@ class BlogCrawl(object):
                     self.blog_url = self.blog_url.replace('blogread', 'tblogread')
                 else:
                     if 'window.location.replace(\'/noblog.htm\');' in initial_page:
-                        logging.info('No blog #%s', str(self.blog_number))
+                        logging.info('%d%% No blog #%s', progress_percent, str(self.blog_number))
                         return 'no_blog'
                     self.parse_blog_info(initial_page)
-                    logging.warning('Empty blog %s', self.blog_url)
+                    logging.warning('%d%% Empty blog %s', progress_percent, self.blog_url)
                     return 'blog_empty'
             if self.is_tblog:
                 logging.info('Blog %s Using tblogread', blog_number)
