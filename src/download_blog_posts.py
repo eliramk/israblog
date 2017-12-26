@@ -40,7 +40,7 @@ EXCLUDE_BLOGS = [
 ]
 
 USER_BACKUP_FOLDERS = [
-    '/users/eliram/Documents/israblog2',
+    '/users/eliram/Documents/israblog3',
     "/home/avihay/tmp/backup"
 ]
 
@@ -768,6 +768,7 @@ if __name__ == '__main__':
     blogs_total = (blog_number_end - blog_number_start + 1)
     posts_downloaded_total = 0
     posts_read_total = 0
+    comments_total = 0
     for blog_number in range(blog_number_start, blog_number_end + 1):
         blog_crawl = BlogCrawl(blog_number, backup_folder, backup_images=backup_images)
         result = blog_crawl.process_blog()
@@ -809,8 +810,10 @@ if __name__ == '__main__':
                         str(int(post.timestamp)) if post.timestamp else '',
                         post.post_title)
                     log_file.write(line)
+
             posts_downloaded_total += blog_crawl.posts_downloaded
             posts_read_total += blog_crawl.posts_read
+            comments_total += blog_crawl.total_comments
 
         if blog_number % 100 == 0:
             elapsed_time = time() - start_time
@@ -832,5 +835,7 @@ if __name__ == '__main__':
     time_passed = datetime.datetime.utcfromtimestamp(elapsed_time).strftime('%H:%M:%S')
     logging.info('Finished. Found %d blogs in range %d-%d. Ratio %d%%. Time to complete: %s' % (
         blog_enum, blog_number_start, blog_number_end, ratio, time_passed))
+    logging.info('posts_downloaded_total=%d posts_read_total=%d  comments_total=%d' % (
+        posts_downloaded_total, posts_read_total, comments_total))
     logging.info('Results: %s', results)
     wait = raw_input('Press ENTER')
