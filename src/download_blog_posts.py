@@ -21,7 +21,7 @@ try:
 except ImportError:
     pass
 
-VERSION = '12.3'
+VERSION = '12.4'
 
 START_FROM_POST_NUMBER = None  # '3820213'  # Optional. Use None or a string containing the post number to move back from. e.g. '3754624'
 STOP_AT_POST_NUMBER = None  # '12452501'  # Optional
@@ -40,7 +40,7 @@ EXCLUDE_BLOGS = [
 ]
 
 USER_BACKUP_FOLDERS = [
-    '/users/eliram/Documents/israblog3',
+    '/users/eliram/Documents/israblog2',
     "/home/avihay/tmp/backup"
 ]
 
@@ -71,6 +71,7 @@ RE_NICKNAME = u'<b>.{5}:</b>(?:\s|&nbsp;|.?)(.*?)<br>'
 RE_AGE = u'<br></br><b>..:</b>(?:\s|&nbsp;|.?)(\d*)<br></br>'
 
 progress_percent = 0
+log_prefix = ''
 results = {}
 
 COMMON_TEMPLATE_IMAGES = [
@@ -289,6 +290,7 @@ class BlogCrawl(object):
             self.blog_url = self.blog_url.replace('tblogread', 'blogread')
             self.blog_url = self.blog_url.replace('blogread', 'tblogread')
             return self.process_post(self.get_post_url(post_number), post_number=post_number)
+        self.posts_read += 1
         self.current_post = BlogPost(post_number)
         self.posts[post_number] = self.current_post
         self.posts_list.insert(0, self.current_post)
@@ -310,8 +312,8 @@ class BlogCrawl(object):
             self.current_post.comments = int(comments_count)
             self.current_post.comments_saved = True
             self.total_comments += int(comments_count)
-        logging.info('%d%% Blog %s Post #%d [%s] %s [%d comments] %s',
-                     progress_percent,
+        logging.info('%s Blog %s Post #%d [%s] %s [%d comments] %s',
+                     log_prefix,
                      self.blog_number,
                      len(self.posts),
                      post_number,
@@ -339,6 +341,7 @@ class BlogCrawl(object):
                 post_url = post_url.replace('blogread', 'tblogread')
                 post_html = self.read_url(post_url)
 
+        self.posts_downloaded += 1
         self.current_post = BlogPost(post_number)
         self.posts[post_number] = self.current_post
         self.posts_list.insert(0, self.current_post)
@@ -487,8 +490,8 @@ class BlogCrawl(object):
         if platform != 'darwin' and not re.search('[A-Za-z]', post_title):  # Don't reverse english titles
             post_title = u''.join(reversed(post_title.decode('UTF-8', errors='ignore')))  # [::-1]
             post_title = post_title.encode('UTF-8')
-        logging.info('%d%% Blog %s Post #%d (DOWNLOADING) [%s] %s [%d comments] %s',
-                     progress_percent,
+        logging.info('%s Blog %s Post #%d (DOWNLOADING) [%s] %s [%d comments] %s',
+                     log_prefix,
                      self.blog_number,
                      len(self.posts),
                      post_number,
@@ -542,10 +545,10 @@ class BlogCrawl(object):
                     self.blog_url = self.blog_url.replace('blogread', 'tblogread')
                 else:
                     if 'window.location.replace(\'/noblog.htm\');' in initial_page:
-                        logging.info('%d%% No blog #%s', progress_percent, str(self.blog_number))
+                        logging.info('%s No blog #%s', log_prefix, str(self.blog_number))
                         return 'no_blog'
                     self.parse_blog_info(initial_page)
-                    logging.warning('%d%% Empty blog %s', progress_percent, self.blog_url)
+                    logging.warning('%s Empty blog %s', log_prefix, self.blog_url)
                     return 'blog_empty'
             if self.is_tblog:
                 logging.info('Blog %s Using tblogread', blog_number)
@@ -672,12 +675,10 @@ class BlogCrawl(object):
                     post_filename = os.path.join(self.blog_folder, 'post_%s.html' % str(post_number))
                     if OVERWRITE_EXISTING_POSTS or not os.path.exists(post_filename):
                         logging.debug('Downloading Post #%s', post_number)
-                        self.posts_downloaded += 1
                         self.process_post(post_url=self.get_post_url(post_number), post_number=str(post_number))
                     else:
                         # Post already exists, reads its data
                         logging.debug('Reading local Post #%s', post_number)
-                        self.posts_read += 1
                         self.parse_post_data(post_filename=post_filename, post_number=str(post_number))
                 else:
                     logging.debug('Already got Post #%s, skipping', post_number)
@@ -785,6 +786,11 @@ if __name__ == '__main__':
         blog_crawl = BlogCrawl(blog_number, backup_folder, backup_images=backup_images)
         blogs_completed = (blog_number - blog_number_start + 1)
         progress_percent = blogs_completed * 100 / blogs_total
+        elapsed_time = time() - start_time
+        blogs_left = blogs_total - blogs_completed
+        time_left = datetime.datetime.utcfromtimestamp(blogs_left * elapsed_time / blogs_completed).strftime(
+            '%H:%M:%S').lstrip('0').lstrip(':')
+        log_prefix = '%d%% %s' % (progress_percent, time_left)
         result = blog_crawl.process_blog()
         results[result] = results.get(result, 0) + 1
         if len(blog_crawl.posts) > 0 or result != 'no_blog':
@@ -831,11 +837,7 @@ if __name__ == '__main__':
             comments_total += blog_crawl.total_comments
 
         if blog_number % 100 == 0:
-            elapsed_time = time() - start_time
-            blogs_left = blogs_total - blogs_completed
             time_passed = datetime.datetime.utcfromtimestamp(elapsed_time).strftime('%H:%M:%S')
-            time_left = datetime.datetime.utcfromtimestamp(blogs_left * elapsed_time / blogs_completed).strftime(
-                '%H:%M:%S')
             logging.info('Completed %d/%d blogs (%d%%). Time passed: %s Time Left: %s Stats: %s' % (
                 blogs_completed,
                 blogs_total,
