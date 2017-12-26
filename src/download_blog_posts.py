@@ -182,7 +182,12 @@ class BlogCrawl(object):
                 logging.error('Error, %d retries left, trying to read url %s' % (attempts, url))
             sleep(5)
 
-        results['errors_blogs'] = results.get('errors_blogs', []).append(url)
+        errors_list = results.get('errors_blogs', None)
+        if errors_list is not None and errors_list:
+            errors_list.append(url)
+        else:
+            errors_list = [url]
+        results['errors_blogs'] = errors_list
         return 'error'
 
     def parse_date(self, post_html):
