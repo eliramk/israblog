@@ -70,6 +70,9 @@ nbsp = HTMLParser().unescape('&nbsp;')
 RE_NICKNAME = u'<b>.{5}:</b>(?:\s|&nbsp;|.?)(.*?)<br>'
 RE_AGE = u'<br></br><b>..:</b>(?:\s|&nbsp;|.?)(\d*)<br></br>'
 
+progress_percent = 0
+results = {}
+
 COMMON_TEMPLATE_IMAGES = [
     'http://f.nanafiles.co.il/Partner48/Service87/Images/Header/headerBGGrad11.png',
     'http://f.nanafiles.co.il/Partner48/Service87/Images/\\Header\\IsraLogo11.png',
@@ -307,7 +310,10 @@ class BlogCrawl(object):
             self.current_post.comments = int(comments_count)
             self.current_post.comments_saved = True
             self.total_comments += int(comments_count)
-        logging.info('Blog %s Post #%d [%s] %s [%d comments] %s', self.blog_number, len(self.posts),
+        logging.info('%d%% Blog %s Post #%d [%s] %s [%d comments] %s',
+                     progress_percent,
+                     self.blog_number,
+                     len(self.posts),
                      post_number,
                      date_obj.strftime('%Y-%m-%d %H:%M') if date_obj else '', self.current_post.comments, post_title)
 
@@ -481,8 +487,14 @@ class BlogCrawl(object):
         if platform != 'darwin' and not re.search('[A-Za-z]', post_title):  # Don't reverse english titles
             post_title = u''.join(reversed(post_title.decode('UTF-8', errors='ignore')))  # [::-1]
             post_title = post_title.encode('UTF-8')
-        logging.info('Blog %s Post #%d (DOWNLOADING) [%s] %s [%d comments] %s', self.blog_number, len(self.posts), post_number,
-                     date_obj.strftime('%Y-%m-%d %H:%M') if date_obj else '', self.current_post.comments, post_title)
+        logging.info('%d%% Blog %s Post #%d (DOWNLOADING) [%s] %s [%d comments] %s',
+                     progress_percent,
+                     self.blog_number,
+                     len(self.posts),
+                     post_number,
+                     date_obj.strftime('%Y-%m-%d %H:%M') if date_obj else '',
+                     self.current_post.comments,
+                     post_title)
 
         return next_post_number
 
@@ -763,14 +775,16 @@ if __name__ == '__main__':
             '"Blog Number","Post Number","Comments","Post Timestamp","Post Epoch","Post Title"\n')
 
     blog_enum = 0
-    results = {}
     start_time = time()
     blogs_total = (blog_number_end - blog_number_start + 1)
     posts_downloaded_total = 0
     posts_read_total = 0
     comments_total = 0
+    blogs_completed = 0
     for blog_number in range(blog_number_start, blog_number_end + 1):
         blog_crawl = BlogCrawl(blog_number, backup_folder, backup_images=backup_images)
+        blogs_completed = (blog_number - blog_number_start + 1)
+        progress_percent = blogs_completed * 100 / blogs_total
         result = blog_crawl.process_blog()
         results[result] = results.get(result, 0) + 1
         if len(blog_crawl.posts) > 0 or result != 'no_blog':
@@ -790,7 +804,8 @@ if __name__ == '__main__':
                     blog_crawl.posts_downloaded
                 )
                 log_file.write(line.decode('windows-1255', errors='ignore').encode('UTF-8'))
-                logging.info('Blog: %d Posts: %d, Comments: %d, Local Posts: %d, Downloaded: %d\r\n' % (
+                logging.info('%d%% Blog: %d Posts: %d, Comments: %d, Local Posts: %d, Downloaded: %d\r\n' % (
+                    progress_percent,
                     blog_number,
                     len(blog_crawl.posts),
                     blog_crawl.total_comments,
@@ -817,7 +832,6 @@ if __name__ == '__main__':
 
         if blog_number % 100 == 0:
             elapsed_time = time() - start_time
-            blogs_completed = (blog_number - blog_number_start + 1)
             blogs_left = blogs_total - blogs_completed
             time_passed = datetime.datetime.utcfromtimestamp(elapsed_time).strftime('%H:%M:%S')
             time_left = datetime.datetime.utcfromtimestamp(blogs_left * elapsed_time / blogs_completed).strftime(
@@ -825,7 +839,7 @@ if __name__ == '__main__':
             logging.info('Completed %d/%d blogs (%d%%). Time passed: %s Time Left: %s Stats: %s' % (
                 blogs_completed,
                 blogs_total,
-                blogs_completed * 100 / blogs_total,
+                progress_percent,
                 time_passed,
                 time_left,
                 results))
@@ -835,7 +849,7 @@ if __name__ == '__main__':
     time_passed = datetime.datetime.utcfromtimestamp(elapsed_time).strftime('%H:%M:%S')
     logging.info('Finished. Found %d blogs in range %d-%d. Ratio %d%%. Time to complete: %s' % (
         blog_enum, blog_number_start, blog_number_end, ratio, time_passed))
-    logging.info('posts_downloaded_total=%d posts_read_total=%d  comments_total=%d' % (
+    logging.info('posts_downloaded_total=%d posts_read_total=%d comments_total=%d' % (
         posts_downloaded_total, posts_read_total, comments_total))
     logging.info('Results: %s', results)
     wait = raw_input('Press ENTER')
