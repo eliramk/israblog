@@ -36,11 +36,27 @@ POST_URL = 'http://israblog.nana10.co.il/blogread.asp?blog=%s&blogcode=%s'
 COMMENTS_URL = 'http://israblog.nana10.co.il/comments.asp?blog=%s&user=%s'
 
 EXCLUDE_BLOGS = [
-    865861
+    865861,
+
+    # Spam blogs
+    860242,
+    860682,
+    860713,
+    860773,
+    860803,
+    860937,
+    860986,
+    861114,
+    861232,
+    861294,
+    861482,
+    861613,
+    861671,
+    861894,
 ]
 
 USER_BACKUP_FOLDERS = [
-    '/users/eliram/Documents/israblog2',
+    '/users/eliram/Documents/israblog3',
     "/home/avihay/tmp/backup"
 ]
 
@@ -170,6 +186,7 @@ class BlogCrawl(object):
         :rtype: str
         """
         attempts = 3
+        logging.debug('read_url %s', url)
         while attempts > 0:
             try:
                 data = urllib2.urlopen(url).read()
