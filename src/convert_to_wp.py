@@ -148,7 +148,7 @@ class BlogComment(object):
         rep += '<wp:comment_date_gmt>%s</wp:comment_date_gmt>\n' % timezone('UTC').normalize(post_date_localized).isoformat()
         rep += '<wp:comment_content><![CDATA[%s]]></wp:comment_content>\n' % self.body
         rep += '<wp:comment_approved>1</wp:comment_approved>\n<wp:comment_type></wp:comment_type>\n'
-        rep += '<wp:comment_parent>{parent_id}</wp:comment_parent>\n'.format(parent_id=' parent_id="%d"' % self.parent_id if self.parent_id else 0)
+        rep += '<wp:comment_parent>{parent_id}</wp:comment_parent>\n'.format(parent_id='%s' % self.parent_id if self.parent_id else 0)
         rep += '</wp:comment>\n'
 
         return rep
