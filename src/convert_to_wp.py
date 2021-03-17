@@ -52,53 +52,35 @@ class BlogPost(object):
         self.comments = []  # type: dict(BlogComment)
         self.date = None # type: DateTime
 
-    def get_dict(self):
-        d = {
-            'post_id': self.post_id,
-            'title': self.title,
-            'body': self.body,
-            'ts': self.ts,
-            'date_str': self.date_str,
-            'date': self.date,
-            'comments_num': len(self.comments),
-            'comments': []
-        }
-        for comment in self.comments:  # type: BlogComment
-            d['comments'].append(comment.get_dict())
-        return d
-
     def __repr__(self):
-        if OUTPUT_FORMAT == 'json':
-            return json.dumps(self.get_dict(), ensure_ascii=False, indent=4)
-        else:
-            rep = '<item>\n'
-            rep += '<title>%s</title>\n' % sanitize_text(self.title)
-            rep += '<link>https://wordpress.com/</link>\n'
-            rep += '<pubDate>%s</pubDate>\n' % self.date.strftime('%a, %d %b %Y %H:%M:%S %z')
-            rep += """<dc:creator>user</dc:creator>
-                    <guid isPermaLink="false">https://wordpress.com/</guid>
-        	        <description></description>\n"""
-            rep += '<content:encoded><![CDATA[\n%s]]></content:encoded>\n' % self.body
-            rep += """<excerpt:encoded><![CDATA[]]></excerpt:encoded>
-        	       <wp:post_id>{post_id}</wp:post_id>
-                   <wp:post_date>{post_time}</wp:post_date>
-           		   <wp:post_date_gmt>{post_gmt_time}</wp:post_date_gmt>
-                   <wp:comment_status>open</wp:comment_status>
-               	   <wp:ping_status>open</wp:ping_status>\n""".format(
-                                                        post_id=self.post_id,
-                                                        post_time=self.date.isoformat(),
-                                                        post_gmt_time=timezone('UTC').normalize(self.date).isoformat())
-            rep += '<wp:post_name>%s</wp:post_name>' % sanitize_text(self.title)
-            rep += """<wp:status>publish</wp:status>
-                    <wp:post_parent>0</wp:post_parent>
-               	    <wp:menu_order>0</wp:menu_order>
-               	    <wp:post_type>post</wp:post_type>
-               	    <wp:post_password></wp:post_password>
-               	    <wp:is_sticky>0</wp:is_sticky>\n"""
-            for comment in self.comments:
-                rep += comment.__repr__()
-            rep += '</item>\n'
-            return rep
+        rep = '<item>\n'
+        rep += '<title>%s</title>\n' % sanitize_text(self.title)
+        rep += '<link>https://wordpress.com/</link>\n'
+        rep += '<pubDate>%s</pubDate>\n' % self.date.strftime('%a, %d %b %Y %H:%M:%S %z')
+        rep += """<dc:creator>user</dc:creator>
+                <guid isPermaLink="false">https://wordpress.com/</guid>
+    	        <description></description>\n"""
+        rep += '<content:encoded><![CDATA[\n%s]]></content:encoded>\n' % self.body
+        rep += """<excerpt:encoded><![CDATA[]]></excerpt:encoded>
+    	       <wp:post_id>{post_id}</wp:post_id>
+               <wp:post_date>{post_time}</wp:post_date>
+       		   <wp:post_date_gmt>{post_gmt_time}</wp:post_date_gmt>
+               <wp:comment_status>open</wp:comment_status>
+           	   <wp:ping_status>open</wp:ping_status>\n""".format(
+                                                    post_id=self.post_id,
+                                                    post_time=self.date.isoformat(),
+                                                    post_gmt_time=timezone('UTC').normalize(self.date).isoformat())
+        rep += '<wp:post_name>%s</wp:post_name>' % sanitize_text(self.title)
+        rep += """<wp:status>publish</wp:status>
+                <wp:post_parent>0</wp:post_parent>
+           	    <wp:menu_order>0</wp:menu_order>
+           	    <wp:post_type>post</wp:post_type>
+           	    <wp:post_password></wp:post_password>
+           	    <wp:is_sticky>0</wp:is_sticky>\n"""
+        for comment in self.comments:
+            rep += comment.__repr__()
+        rep += '</item>\n'
+        return rep
 
 
 class BlogComment(object):
@@ -118,21 +100,6 @@ class BlogComment(object):
         self.parent_id = None  # type: int
         self.post_id = None  # type: int
         self.body = None  # type: str
-
-    def get_dict(self):
-        d = {
-            'id': self.comment_id,
-            'name': self.name,
-            'email': self.email,
-            'url': self.url,
-            'ts': self.ts,
-            'date_str': self.date_str,
-            'level': self.level,
-            'post_id': self.post_id,
-        }
-        if self.parent_id:
-            d['parent_id'] = self.parent_id
-        return d
 
     def __repr__(self):
         post_date = datetime.datetime.strptime(self.date_str, '%H:%M %d/%m/%Y')
