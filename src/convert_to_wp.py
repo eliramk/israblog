@@ -135,13 +135,17 @@ class BlogComment(object):
         return d
 
     def __repr__(self):
+        post_date = datetime.datetime.strptime(self.date_str, '%H:%M %d/%m/%Y')
+        post_date_localized = timezone('Israel').localize(post_date)
+
         rep = '<wp:comment>\n'
         rep += '<wp:comment_id>%s</wp:comment_id>\n' % self.comment_id
         rep += '<wp:comment_author><![CDATA[%s]]></wp:comment_author>\n' % sanitize_text(self.name)
         rep += '<wp:comment_author_email>%s</wp:comment_author_email>\n' % sanitize_text(self.email)
         rep += '<wp:comment_author_url>%s</wp:comment_author_url>\n' % sanitize_text(self.url)
         rep += '<wp:comment_author_IP></wp:comment_author_IP>\n'
-        rep += '<wp:comment_date>%s</wp:comment_date>\n' % self.date_str
+        rep += '<wp:comment_date>%s</wp:comment_date>\n' % post_date_localized.isoformat()
+        rep += '<wp:comment_date_gmt>%s</wp:comment_date_gmt>\n' % timezone('UTC').normalize(post_date_localized).isoformat()
         rep += '<wp:comment_content><![CDATA[%s]]></wp:comment_content>\n' % self.body
         rep += '<wp:comment_approved>1</wp:comment_approved>\n<wp:comment_type></wp:comment_type>\n'
         rep += '<wp:comment_parent>{parent_id}</wp:comment_parent>\n'.format(parent_id=' parent_id="%d"' % self.parent_id if self.parent_id else 0)
