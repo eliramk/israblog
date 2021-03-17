@@ -38,6 +38,7 @@ RE_COMMENT_TITLE = 'תגובות:'
 post_enum = 0
 comment_enum = 0
 
+# Blog Post
 class BlogPost(object):
     def __init__(self, post_id=None):
         """
@@ -83,6 +84,7 @@ class BlogPost(object):
         return rep
 
 
+# Blog Comment
 class BlogComment(object):
     def __init__(self, comment_id=None):
         """
@@ -121,6 +123,8 @@ class BlogComment(object):
         return rep
 
 
+# ParseBackupFile
+# Responsible for parsing the HTML into XML
 class ParseBackupFile(object):
     """
     Parse the HTML
@@ -177,6 +181,10 @@ class ParseBackupFile(object):
         self.posts.append(new_post)
 
     def parse_comment_header(self, row):
+        """
+        Create a new comment object and add data to it
+        :param str row:
+        """
         comment_header = re.search(RE_COMMENT, row)
         new_comment = BlogComment()
 
@@ -214,7 +222,7 @@ class ParseBackupFile(object):
 
     def process_row(self, row):
         """
-
+        Read the current row and deal with it in accordance with its type
         :type row: str
         """
 

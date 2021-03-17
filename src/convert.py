@@ -211,6 +211,10 @@ class ParseBackupFile(object):
         self.posts.append(new_post)
 
     def parse_comment_header(self, row):
+        """
+        Create a new comment object and add data to it
+        :param str row:
+        """
         comment_header = re.search(RE_COMMENT, row)
         new_comment = BlogComment()
 
@@ -248,7 +252,7 @@ class ParseBackupFile(object):
 
     def process_row(self, row):
         """
-
+        Read the current row and deal with it in accordance with its type
         :type row: str
         """
 
