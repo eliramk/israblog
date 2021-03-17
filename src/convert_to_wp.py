@@ -34,6 +34,7 @@ RE_BREAKER_AND_POST = '<br clear="all" style="mso-special-character:line-break;p
 RE_DATE = '>(\d\d?/\d\d?/\d{1,4} \d\d?:\d\d?:\d\d?)<'
 RE_PAGE_END = '<!--xgemius|<script '
 RE_COMMENT_TS = ', (\d\d?:\d\d? \d\d?/\d\d?/\d{1,4}):<br>'
+RE_COMMENT_TITLE = 'תגובות:'
 post_enum = 0
 comment_enum = 0
 
@@ -271,6 +272,8 @@ class ParseBackupFile(object):
                 self.set_state(STATE_POST)
             elif re.search(RE_PAGE_END, row):
                 self.set_state(STATE_OUT)
+            elif re.search(RE_COMMENT_TITLE, row):
+                self.current_blog_post.body += row.replace(RE_COMMENT_TITLE, '')
             else:
                 self.current_blog_post.body += row.replace('<br>', '<br/>') + '\n'
         elif self.state == STATE_COMMENT:
