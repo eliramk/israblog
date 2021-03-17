@@ -18,6 +18,7 @@ STATE_COMMENT = 3
 
 RE_COMMENT = '<p class="MsoNormal" dir="RTL" lang="HE" style="font-size:10.0pt; font-family: Arial; margin-right:([\d\.]+)in">(.*)'
 RE_POST = '<p class="MsoNormal" dir="RTL" lang="HE" style="font-size:12.0pt; font-family: Arial">'
+RE_BREAKER_AND_POST = '<br clear="all" style="mso-special-character:line-break;page-break-before:always"><p class="MsoNormal" dir="RTL" lang="HE" style="font-size:12.0pt; font-family: Arial">'
 RE_DATE = '>(\d\d?/\d\d?/\d{1,4} \d\d?:\d\d?:\d\d?)<'
 RE_PAGE_END = '<!--xgemius|<script '
 RE_COMMENT_TS = ', (\d\d?:\d\d? \d\d?/\d\d?/\d{1,4}):<br>'
@@ -271,6 +272,9 @@ class ParseBackupFile(object):
                 # a blog comment started
                 self.parse_comment_header(row)
                 self.set_state(STATE_COMMENT)
+            elif re.search(RE_BREAKER_AND_POST, row):
+                self.parse_post_header(row)
+                self.set_state(STATE_POST)
             elif re.search(RE_PAGE_END, row):
                 self.set_state(STATE_OUT)
             else:
@@ -294,7 +298,7 @@ class ParseBackupFile(object):
                 else:
                     # Just add as-is
                     self.current_blog_comment.body += row + '\n'
-            elif re.search(RE_POST, row):
+            elif re.search(RE_POST, row) or re.search(RE_BREAKER_AND_POST, row):
                 self.parse_post_header(row)
                 self.set_state(STATE_POST)
             elif re.search(RE_COMMENT, row):
