@@ -338,13 +338,13 @@ def parse_backup_files(backup_files_list):
     return parsed_data
 
 
-def get_backup_files():
+def get_backup_files(backup_folder):
     """
     Search folder for html backup files
     :return: A list of backup files
     :rtype: list
     """
-    all_files = os.listdir(BACKUP_FOLDER)
+    all_files = os.listdir(backup_folder)
     logging.debug(all_files)
 
     file_list = []
@@ -386,7 +386,7 @@ def save_parsed_data(parsed_data):
 
 
 def main():
-    backup_files_list = get_backup_files()
+    backup_files_list = get_backup_files(BACKUP_FOLDER)
     parsed_data = parse_backup_files(backup_files_list)
     save_parsed_data(parsed_data)
 
