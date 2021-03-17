@@ -324,12 +324,8 @@ def parse_backup_files(backup_files_list):
     """
     parsed_data = []
     for filename in backup_files_list:
-        # with codecs.open(os.path.join(BACKUP_FOLDER, filename), encoding='cp1255') as backup_file:
-        #     file_text = backup_file.readlines()
-        with open(os.path.join(BACKUP_FOLDER, filename)) as backup_file:
+        with open(os.path.join(BACKUP_FOLDER, filename), encoding='cp1255') as backup_file:
             file_text = backup_file.read()
-        file_text = file_text.decode("cp1255", errors='ignore')
-        file_text = file_text.encode('UTF-8', errors='ignore')
         parse_obj = ParseBackupFile(file_text.splitlines())
         new_data = parse_obj.process()
         parsed_data += new_data
