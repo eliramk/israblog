@@ -1,15 +1,27 @@
-"""
-This script converts Israblog html (complete) backup files to an XML file
-"""
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+# This script converts Israblog html (complete) backup files to an XML file
+# Originally written by Eliram (@eliramk)
+# Updated for wordpress by Shir (@shirblc)
+
 import logging
 import re
 import os
 import datetime
 import json
+import datetime
+from pytz import timezone
+from convert import (
+                    get_post_enum,
+                    get_comment_enum,
+                    sanitize_text,
+                    get_backup_files
+                    )
 
-BACKUP_FOLDER = '/users/eliram/Documents/israblog'
+BACKUP_FOLDER = './isra'
 TEMPLATE_FILE = 'template.html'
-OUTPUT_FORMAT = 'json'  # json / xml
+OUTPUT_FORMAT = 'xml'
 OUTPUT_FILENAME = os.path.join(BACKUP_FOLDER, 'blog.' + OUTPUT_FORMAT)
 
 STATE_OUT = 1
@@ -22,41 +34,11 @@ RE_BREAKER_AND_POST = '<br clear="all" style="mso-special-character:line-break;p
 RE_DATE = '>(\d\d?/\d\d?/\d{1,4} \d\d?:\d\d?:\d\d?)<'
 RE_PAGE_END = '<!--xgemius|<script '
 RE_COMMENT_TS = ', (\d\d?:\d\d? \d\d?/\d\d?/\d{1,4}):<br>'
+RE_COMMENT_TITLE = 'תגובות:'
 post_enum = 0
 comment_enum = 0
 
-
-def get_post_enum():
-    """
-
-    :return:
-    :rtype: int
-    """
-    global post_enum
-    post_enum += 1
-    return post_enum
-
-
-def get_comment_enum():
-    """
-
-    :return:
-    :rtype: int
-    """
-    global comment_enum
-    comment_enum += 1
-    return comment_enum
-
-
-def sanitize_text(text_str):
-    if OUTPUT_FORMAT == 'xml':
-        if text_str is None:
-            return ''
-        if '<' in text_str:
-            return '<![CDATA[%s]]>' % text_str
-    return text_str
-
-
+# Blog Post
 class BlogPost(object):
     def __init__(self, post_id=None):
         """
@@ -69,41 +51,40 @@ class BlogPost(object):
         self.ts = None  # type: float
         self.date_str = None  # type: str
         self.comments = []  # type: dict(BlogComment)
-
-    def get_dict(self):
-        d = {
-            'post_id': self.post_id,
-            'title': self.title,
-            'body': self.body,
-            'ts': self.ts,
-            'date_str': self.date_str,
-            'comments_num': len(self.comments),
-            'comments': []
-        }
-        for comment in self.comments:  # type: BlogComment
-            d['comments'].append(comment.get_dict())
-        return d
+        self.date = None # type: DateTime
 
     def __repr__(self):
-        if OUTPUT_FORMAT == 'json':
-            return json.dumps(self.get_dict(), ensure_ascii=False, indent=4)
-        else:
-            rep = '<post id="{post_id}" ts="{ts}" date_str="{date_str}">\n'.format(
-                post_id=self.post_id,
-                title=self.title,
-                ts=self.ts,
-                date_str=self.date_str,
-            )
-            rep += '<title>%s</title>\n' % sanitize_text(self.title)
-            rep += '<body><![CDATA[\n%s]]></body>\n' % self.body
-            rep += '<comments>'
-            for comment in self.comments:
-                rep += comment.__repr__()
-            rep += '</comments>\n'
-            rep += '</post>\n'
-            return rep
+        rep = '<item>\n'
+        rep += '<title>%s</title>\n' % sanitize_text(self.title)
+        rep += '<link>https://wordpress.com/</link>\n'
+        rep += '<pubDate>%s</pubDate>\n' % self.date.strftime('%a, %d %b %Y %H:%M:%S %z')
+        rep += """<dc:creator>user</dc:creator>
+                <guid isPermaLink="false">https://wordpress.com/</guid>
+    	        <description></description>\n"""
+        rep += '<content:encoded><![CDATA[\n%s]]></content:encoded>\n' % self.body
+        rep += """<excerpt:encoded><![CDATA[]]></excerpt:encoded>
+    	       <wp:post_id>{post_id}</wp:post_id>
+               <wp:post_date>{post_time}</wp:post_date>
+       		   <wp:post_date_gmt>{post_gmt_time}</wp:post_date_gmt>
+               <wp:comment_status>open</wp:comment_status>
+           	   <wp:ping_status>open</wp:ping_status>\n""".format(
+                                                    post_id=self.post_id,
+                                                    post_time=self.date.isoformat(),
+                                                    post_gmt_time=timezone('UTC').normalize(self.date).isoformat())
+        rep += '<wp:post_name>%s</wp:post_name>' % sanitize_text(self.title)
+        rep += """<wp:status>publish</wp:status>
+                <wp:post_parent>0</wp:post_parent>
+           	    <wp:menu_order>0</wp:menu_order>
+           	    <wp:post_type>post</wp:post_type>
+           	    <wp:post_password></wp:post_password>
+           	    <wp:is_sticky>0</wp:is_sticky>\n"""
+        for comment in self.comments:
+            rep += comment.__repr__()
+        rep += '</item>\n'
+        return rep
 
 
+# Blog Comment
 class BlogComment(object):
     def __init__(self, comment_id=None):
         """
@@ -122,41 +103,28 @@ class BlogComment(object):
         self.post_id = None  # type: int
         self.body = None  # type: str
 
-    def get_dict(self):
-        d = {
-            'id': self.comment_id,
-            'name': self.name,
-            'email': self.email,
-            'url': self.url,
-            'ts': self.ts,
-            'date_str': self.date_str,
-            'level': self.level,
-            'post_id': self.post_id,
-        }
-        if self.parent_id:
-            d['parent_id'] = self.parent_id
-        return d
-
     def __repr__(self):
-        if OUTPUT_FORMAT == 'json':
-            return json.dumps(self.get_dict())
-        else:
-            rep = '<comment id="{comment_id}" ts="{ts}" date_str="{date_str}" level="{level}" post_id="{post_id}"{parent_id}>'.format(
-                comment_id=self.comment_id,
-                ts=self.ts,
-                date_str=self.date_str,
-                level=self.level,
-                parent_id=' parent_id="%d"' % self.parent_id if self.parent_id else '',
-                post_id=self.post_id,
-            )
-            rep += '<name>%s</name>\n' % sanitize_text(self.name)
-            rep += '<email>%s</email>\n' % sanitize_text(self.email)
-            rep += '<url>%s</url>\n' % sanitize_text(self.url)
-            rep += '<body><![CDATA[%s]]></body>\n' % self.body
-            rep += '</comment>\n'
-            return rep
+        post_date = datetime.datetime.strptime(self.date_str, '%H:%M %d/%m/%Y')
+        post_date_localized = timezone('Israel').localize(post_date)
+
+        rep = '<wp:comment>\n'
+        rep += '<wp:comment_id>%s</wp:comment_id>\n' % self.comment_id
+        rep += '<wp:comment_author><![CDATA[%s]]></wp:comment_author>\n' % sanitize_text(self.name)
+        rep += '<wp:comment_author_email>%s</wp:comment_author_email>\n' % sanitize_text(self.email)
+        rep += '<wp:comment_author_url>%s</wp:comment_author_url>\n' % sanitize_text(self.url)
+        rep += '<wp:comment_author_IP></wp:comment_author_IP>\n'
+        rep += '<wp:comment_date>%s</wp:comment_date>\n' % post_date_localized.isoformat()
+        rep += '<wp:comment_date_gmt>%s</wp:comment_date_gmt>\n' % timezone('UTC').normalize(post_date_localized).isoformat()
+        rep += '<wp:comment_content><![CDATA[%s]]></wp:comment_content>\n' % self.body
+        rep += '<wp:comment_approved>1</wp:comment_approved>\n<wp:comment_type></wp:comment_type>\n'
+        rep += '<wp:comment_parent>{parent_id}</wp:comment_parent>\n'.format(parent_id='%s' % self.parent_id if self.parent_id else 0)
+        rep += '</wp:comment>\n'
+
+        return rep
 
 
+# ParseBackupFile
+# Responsible for parsing the HTML into XML
 class ParseBackupFile(object):
     """
     Parse the HTML
@@ -204,6 +172,8 @@ class ParseBackupFile(object):
                                      int(time_array[1]),
                                      int(time_array[2]))
         new_post.date_str = date_str
+        post_date = datetime.datetime.strptime(date_str, '%d/%m/%Y %H:%M:%S')
+        new_post.date = timezone('Israel').localize(post_date)
         new_post.ts = (date_obj - datetime.datetime(1970, 1, 1)).total_seconds()
         new_post.body = ''
 
@@ -281,6 +251,8 @@ class ParseBackupFile(object):
                 self.set_state(STATE_POST)
             elif re.search(RE_PAGE_END, row):
                 self.set_state(STATE_OUT)
+            elif re.search(RE_COMMENT_TITLE, row):
+                self.current_blog_post.body += row.replace(RE_COMMENT_TITLE, '')
             else:
                 self.current_blog_post.body += row.replace('<br>', '<br/>') + '\n'
         elif self.state == STATE_COMMENT:
@@ -334,6 +306,8 @@ def parse_backup_files(backup_files_list):
     for filename in backup_files_list:
         with open(os.path.join(BACKUP_FOLDER, filename), encoding='cp1255') as backup_file:
             file_text = backup_file.read()
+        #file_text = file_text.decode("cp1255", errors='ignore')
+        #file_text = file_text.encode('UTF-8', errors='ignore')
         parse_obj = ParseBackupFile(file_text.splitlines())
         new_data = parse_obj.process()
         parsed_data += new_data
@@ -342,51 +316,61 @@ def parse_backup_files(backup_files_list):
     return parsed_data
 
 
-def get_backup_files(backup_folder):
-    """
-    Search folder for html backup files
-    :return: A list of backup files
-    :rtype: list
-    """
-    all_files = os.listdir(backup_folder)
-    logging.debug(all_files)
-
-    file_list = []
-    for filename in all_files:
-        if filename.endswith('.html') and filename != TEMPLATE_FILE:
-            # check if there is a matching folder
-            if filename[:-5] + '_files' in all_files:
-                file_list.append(filename)
-
-    logging.info('Found %d backup files to process', len(file_list))
-    logging.debug(file_list)
-    return file_list
-
-
 def save_parsed_data(parsed_data):
     """
     Save the data as XML
     :param dict parsed_data:
     """
-
     with open(OUTPUT_FILENAME, mode='w') as output_file:
-        if OUTPUT_FORMAT == 'xml':
-            output_file.write('<XML><posts>\n')
-            for post in parsed_data:
-                output_file.write(post.__repr__())
-            output_file.write('\n</posts></XML>\n')
-        elif OUTPUT_FORMAT == 'json':
-            output_file.write('{"posts": [\n')
-            add_prefix = False
-            for post in parsed_data:
-                if add_prefix:
-                    output_file.write(',\n')
-                else:
-                    add_prefix = True
-                output_file.write(post.__repr__())
-            output_file.write('\n]}\n')
+        output_file.write("""<?xml version="1.0" encoding="UTF-8" ?>
+        <!-- This is a WordPress eXtended RSS file generated by WordPress as an export of your site. -->
+        <!-- It contains information about your site's posts, pages, comments, categories, and other content. -->
+        <!-- You may use this file to transfer that content from one site to another. -->
+        <!-- This file is not intended to serve as a complete backup of your site. -->
 
-            # print parsed_data
+        <!-- To import this information into a WordPress site follow these steps: -->
+        <!-- 1. Log in to that site as an administrator. -->
+        <!-- 2. Go to Tools: Import in the WordPress admin panel. -->
+        <!-- 3. Install the "WordPress" importer from the list. -->
+        <!-- 4. Activate & Run Importer. -->
+        <!-- 5. Upload this file using the form provided on that page. -->
+        <!-- 6. You will first be asked to map the authors in this export file to users -->
+        <!--    on the site. For each author, you may choose to map to an -->
+        <!--    existing user on the site or to create a new user. -->
+        <!-- 7. WordPress will then import each of the posts, pages, comments, categories, etc. -->
+        <!--    contained in this file into your site. -->
+
+        <!-- generator="WordPress.com" created="2021-03-17 12:26"-->
+        <rss version="2.0"
+        	xmlns:excerpt="http://wordpress.org/export/1.2/excerpt/"
+        	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+        	xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+        	xmlns:dc="http://purl.org/dc/elements/1.1/"
+        	xmlns:wp="http://wordpress.org/export/1.2/"
+        >
+
+        <channel>
+        	<title>Blog</title>
+        	<link>https://wordpress.com</link>
+        	<description></description>
+        	<pubDate>Wed, 17 Mar 2021 12:26:39 +0000</pubDate>
+        	<language></language>
+        	<wp:wxr_version>1.2</wp:wxr_version>
+        	<wp:base_site_url>http://wordpress.com/</wp:base_site_url>
+        	<wp:base_blog_url>https://wordpress.com</wp:base_blog_url>
+
+        	<wp:author><wp:author_id>0</wp:author_id><wp:author_login><![CDATA[user]]></wp:author_login></wp:author>
+
+
+        	<generator>http://wordpress.com/</generator>
+        <image>
+        		<url>http://s0.wp.com/i/buttonw-com.png</url>
+        		<title>Blog</title>
+        		<link>https://wordpress.com</link>
+        	</image>\n""")
+        for post in parsed_data:
+            output_file.write(post.__repr__())
+        output_file.write('\n</channel>\n</rss>\n')
 
 
 def main():
